@@ -14,12 +14,11 @@ This version is intentionally dependency-free so the MVP can run immediately fro
 - Renewal and trial alert detection using configurable thresholds.
 - Savings recommendations for unused, duplicated, high-cost, and trial subscriptions.
 - Local settings for reminder windows, annual renewal warnings, and high-cost thresholds.
-- JSON export for demo data handoff.
-- Seeded demo data matching the presentation categories: streaming, SaaS/productivity, health/wellness, cloud storage, and forgotten/unused services.
+- JSON export for local data handoff.
 
 ## Requirements
 
-SubCheck Phase 1 does not require a package install step. The app is plain HTML, CSS, and JavaScript, and it stores local demo accounts and dashboard data in browser `localStorage`.
+SubCheck Phase 1 does not require a package install step. The app is plain HTML, CSS, and JavaScript, and it stores local accounts and dashboard data in browser `localStorage`.
 
 Install these tools if you want to use the included scripts:
 
@@ -80,7 +79,7 @@ Use the **Sign out** button in the dashboard header to return to the sign-in scr
 
 ## Local Data
 
-The MVP saves accounts, active session, subscriptions, and settings in browser `localStorage`. To reset subscriptions for the signed-in account, use the in-app **Reset demo data** button on the Subscriptions or Settings screen.
+The MVP saves accounts, active session, subscriptions, and settings in browser `localStorage`. New accounts start with an empty subscription list. To remove subscriptions for the signed-in account, use **Clear subscriptions** on the Subscriptions screen or **Clear local data** on the Settings screen.
 
 To remove all local accounts and sessions, clear site data for the local URL in your browser, or clear `localStorage` for `http://127.0.0.1:4173`.
 
@@ -99,7 +98,7 @@ This validates `src/data.js` and `src/app.js` with Node's parser.
 ## Troubleshooting
 
 - If `npm run start` fails because Python is missing, install Python 3 or run the app by opening `index.html` directly.
-- If the browser shows old data, reset demo data inside the app or clear `localStorage` for the local site.
+- If the browser shows old data, clear local data inside the app or clear `localStorage` for the local site.
 - If port `4173` is busy, use a different port with `python -m http.server`.
 
 ## Repository Structure

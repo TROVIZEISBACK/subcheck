@@ -3,6 +3,16 @@
   var PREFS_KEY = "subcheck.phase1.preferences";
   var USERS_KEY = "subcheck.phase1.users";
   var SESSION_KEY = "subcheck.phase1.session";
+  var LEGACY_EXAMPLE_SUBSCRIPTIONS = {
+    "sub-spotify": "Spotify",
+    "sub-netflix": "Netflix",
+    "sub-hulu": "Hulu",
+    "sub-microsoft-365": "Microsoft 365",
+    "sub-google-one": "Google One",
+    "sub-calm": "Calm",
+    "sub-dropbox": "Dropbox",
+    "sub-figma": "Figma Professional"
+  };
   var seed = window.SubCheckSeed;
   var app = document.getElementById("app");
   var modalRoot = document.getElementById("modal-root");
@@ -101,10 +111,22 @@
 
     try {
       var parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : clone(seed.subscriptions);
+      return Array.isArray(parsed) ? cleanLegacyExampleSubscriptions(parsed) : clone(seed.subscriptions);
     } catch (error) {
       return clone(seed.subscriptions);
     }
+  }
+
+  function cleanLegacyExampleSubscriptions(subscriptions) {
+    var cleaned = subscriptions.filter(function removeLegacyExample(subscription) {
+      return LEGACY_EXAMPLE_SUBSCRIPTIONS[subscription.id] !== subscription.name;
+    });
+
+    if (state.currentUser && cleaned.length !== subscriptions.length) {
+      window.localStorage.setItem(userStorageKey(SUBSCRIPTIONS_KEY), JSON.stringify(cleaned));
+    }
+
+    return cleaned;
   }
 
   function loadPreferences() {
@@ -541,7 +563,7 @@
       '<aside class="auth-context" aria-label="Local account details">',
       '<div>',
       '<p class="eyebrow">What gets stored</p>',
-      '<h2>Private demo workspace</h2>',
+      '<h2>Private local workspace</h2>',
       '<p>SubCheck saves account records, hashed passwords, subscriptions, and alert settings in browser localStorage for this MVP.</p>',
       "</div>",
       '<div class="auth-fact-list">',
@@ -628,7 +650,7 @@
       subscriptions: "Manual tracking",
       alerts: "Renewal protection",
       savings: "Optimization logic",
-      settings: "Local demo settings"
+      settings: "Local account settings"
     };
     return labels[state.view] || "SubCheck";
   }
@@ -722,11 +744,11 @@
       '<div class="donut-layout">',
       '<div class="donut" style="background: conic-gradient(' + gradient + ')" role="img" aria-label="Category spend distribution"><span>' + Math.round(total ? (entries[0].value / total) * 100 : 0) + '%</span></div>',
       '<div class="legend-list">',
-      entries
+      entries.length ? entries
         .map(function entry(item) {
           return '<div class="legend-row"><span class="legend-swatch" style="background:' + item.color + '"></span><span>' + item.shortLabel + '</span><strong>' + currency(item.value) + "</strong></div>";
         })
-        .join(""),
+        .join("") : renderEmptyState("No spending categories yet.", "Add your first subscription to see category spend."),
       "</div>",
       "</div>",
       "</article>"
@@ -751,7 +773,7 @@
       '<button class="ghost-button" data-action="navigate" data-view="alerts">Review alerts</button>',
       "</div>",
       '<div class="timeline-list">',
-      upcoming.map(renderTimelineItem).join(""),
+      upcoming.length ? upcoming.map(renderTimelineItem).join("") : renderEmptyState("No renewals tracked yet.", "Add a subscription to build your billing timeline."),
       "</div>",
       "</article>"
     ].join("");
@@ -809,7 +831,7 @@
       '<div class="segmented-control" role="tablist" aria-label="Subscription filters">',
       ["all", "trial", "active", "unused", "dueSoon"].map(renderFilterButton).join(""),
       "</div>",
-      '<button class="secondary-button" data-action="reset-demo">' + icon("refresh") + "<span>Reset demo data</span></button>",
+      '<button class="secondary-button" data-action="clear-local-data">' + icon("refresh") + "<span>Clear subscriptions</span></button>",
       "</section>",
       '<section class="subscription-list">',
       filtered.length ? filtered.map(renderSubscriptionCard).join("") : renderEmptyState("No subscriptions match this filter.", "Try another filter or add a new subscription."),
@@ -969,7 +991,7 @@
       '<p class="body-copy">This Phase 1 build stores local accounts, subscriptions, and settings in this browser only. Phase 2 should move auth and records into Supabase and connect Plaid transaction sync.</p>',
       '<div class="settings-actions">',
       '<button class="secondary-button" data-action="export-data">' + icon("download") + "<span>Export JSON</span></button>",
-      '<button class="danger-button" data-action="reset-demo">' + icon("refresh") + "<span>Reset demo</span></button>",
+      '<button class="danger-button" data-action="clear-local-data">' + icon("refresh") + "<span>Clear local data</span></button>",
       "</div>",
       "</article>",
       "</section>"
@@ -1226,8 +1248,8 @@
     render();
   }
 
-  function resetDemoData() {
-    if (!window.confirm("Reset all local SubCheck data to the demo set?")) {
+  function clearLocalData() {
+    if (!window.confirm("Clear all subscriptions and reset settings for this local account?")) {
       return;
     }
 
@@ -1302,8 +1324,8 @@
       markUnused(id);
     }
 
-    if (action === "reset-demo") {
-      resetDemoData();
+    if (action === "clear-local-data") {
+      clearLocalData();
     }
 
     if (action === "export-data") {
