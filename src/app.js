@@ -14,6 +14,7 @@
     "sub-figma": "Figma Professional"
   };
   var seed = window.SubCheckSeed;
+  var serviceCatalog = seed.serviceCatalog || [];
   var app = document.getElementById("app");
   var modalRoot = document.getElementById("modal-root");
 
@@ -111,22 +112,23 @@
 
     try {
       var parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? cleanLegacyExampleSubscriptions(parsed) : clone(seed.subscriptions);
+      return Array.isArray(parsed) ? normalizeSavedSubscriptions(parsed) : clone(seed.subscriptions);
     } catch (error) {
       return clone(seed.subscriptions);
     }
   }
 
-  function cleanLegacyExampleSubscriptions(subscriptions) {
+  function normalizeSavedSubscriptions(subscriptions) {
     var cleaned = subscriptions.filter(function removeLegacyExample(subscription) {
       return LEGACY_EXAMPLE_SUBSCRIPTIONS[subscription.id] !== subscription.name;
     });
+    var normalized = cleaned.map(ensureServiceIntelligence);
 
-    if (state.currentUser && cleaned.length !== subscriptions.length) {
-      window.localStorage.setItem(userStorageKey(SUBSCRIPTIONS_KEY), JSON.stringify(cleaned));
+    if (state.currentUser && JSON.stringify(normalized) !== JSON.stringify(subscriptions)) {
+      window.localStorage.setItem(userStorageKey(SUBSCRIPTIONS_KEY), JSON.stringify(normalized));
     }
 
-    return cleaned;
+    return normalized;
   }
 
   function loadPreferences() {
@@ -260,6 +262,167 @@
     };
   }
 
+  function ensureServiceIntelligence(subscription) {
+    if (subscription.serviceIntelligence && Array.isArray(subscription.serviceIntelligence.accessTags)) {
+      return subscription;
+    }
+
+    return Object.assign({}, subscription, {
+      serviceIntelligence: buildServiceIntelligence(subscription.name, subscription.category, subscription.accessNotes || subscription.notes || "")
+    });
+  }
+
+  function normalizeServiceKey(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/\+/g, " plus ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\b(inc|llc|ltd|subscription|premium|plus|pro|plan|app)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function serviceSearchTerms(service) {
+    return [service.canonicalName].concat(service.aliases || []).map(normalizeServiceKey).filter(Boolean);
+  }
+
+  function serviceMatchScore(nameKey, service) {
+    var terms = serviceSearchTerms(service);
+    var nameTokens = nameKey.split(" ").filter(Boolean);
+    var best = 0;
+
+    terms.forEach(function scoreTerm(term) {
+      if (term === nameKey) {
+        best = Math.max(best, 100);
+        return;
+      }
+
+      if (term && nameKey && (term.indexOf(nameKey) >= 0 || nameKey.indexOf(term) >= 0)) {
+        best = Math.max(best, 82);
+        return;
+      }
+
+      var termTokens = term.split(" ").filter(Boolean);
+      var overlap = nameTokens.filter(function inBoth(token) {
+        return termTokens.indexOf(token) >= 0;
+      }).length;
+      var score = termTokens.length ? Math.round((overlap / termTokens.length) * 72) : 0;
+      best = Math.max(best, score);
+    });
+
+    return best;
+  }
+
+  function matchServiceCatalog(name) {
+    var nameKey = normalizeServiceKey(name);
+    if (!nameKey) {
+      return null;
+    }
+
+    return serviceCatalog
+      .map(function toCandidate(service) {
+        return {
+          service: service,
+          score: serviceMatchScore(nameKey, service)
+        };
+      })
+      .filter(function confident(candidate) {
+        return candidate.score >= 70;
+      })
+      .sort(function byScore(a, b) {
+        return b.score - a.score;
+      })[0] || null;
+  }
+
+  function parseAccessTags(value) {
+    return unique(
+      String(value || "")
+        .split(/[,;\n]+/)
+        .map(function toTag(part) {
+          return normalizeServiceKey(part).replace(/\s+/g, "-");
+        })
+        .filter(function meaningful(tag) {
+          return tag.length > 1;
+        })
+    );
+  }
+
+  function unique(values) {
+    var seen = {};
+    return values.filter(function once(value) {
+      if (!value || seen[value]) {
+        return false;
+      }
+      seen[value] = true;
+      return true;
+    });
+  }
+
+  function buildServiceIntelligence(name, category, accessNotes) {
+    var match = matchServiceCatalog(name);
+
+    if (match) {
+      var service = match.service;
+      return {
+        status: "recognized",
+        serviceId: service.id,
+        canonicalName: service.canonicalName,
+        confidence: match.score >= 95 ? "High" : "Medium",
+        source: "Local service catalog",
+        checkedAt: new Date().toISOString(),
+        homepage: service.homepage,
+        merchantName: service.merchantName || service.canonicalName,
+        accessSummary: String(accessNotes || service.accessSummary || "").trim(),
+        accessTags: unique(service.accessTags || [])
+      };
+    }
+
+    var manualTags = parseAccessTags(accessNotes);
+    return {
+      status: "unverified",
+      serviceId: "",
+      canonicalName: "",
+      confidence: "Low",
+      source: "Manual entry",
+      checkedAt: new Date().toISOString(),
+      homepage: "",
+      merchantName: "",
+      accessSummary: String(accessNotes || "").trim(),
+      accessTags: manualTags.length ? manualTags : ["category-" + category]
+    };
+  }
+
+  function serviceAccessTags(subscription) {
+    var intelligence = subscription.serviceIntelligence || {};
+    if (Array.isArray(intelligence.accessTags) && intelligence.accessTags.length) {
+      return intelligence.accessTags;
+    }
+    return ["category-" + subscription.category];
+  }
+
+  function sharedAccessTags(first, second) {
+    var secondTags = serviceAccessTags(second);
+    return serviceAccessTags(first).filter(function shared(tag) {
+      return secondTags.indexOf(tag) >= 0;
+    });
+  }
+
+  function formatAccessTag(tag) {
+    return labelize(String(tag || "").replace(/^category-/, ""));
+  }
+
+  function accessSummary(subscription) {
+    var intelligence = subscription.serviceIntelligence || {};
+    if (intelligence.accessSummary) {
+      return intelligence.accessSummary;
+    }
+    if (intelligence.status === "unverified") {
+      return "Access not verified. Add access/features in the subscription form to improve overlap checks.";
+    }
+    return "No access details yet.";
+  }
+
   function activeSubscriptions() {
     return state.subscriptions.filter(function isBillable(subscription) {
       return subscription.status !== "paused";
@@ -338,44 +501,100 @@
   }
 
   function redundantGroups() {
-    var grouped = {};
+    var subscriptions = activeSubscriptions();
+    var parent = {};
+    var overlapByPair = {};
 
-    activeSubscriptions().forEach(function group(subscription) {
-      if (!grouped[subscription.category]) {
-        grouped[subscription.category] = [];
+    subscriptions.forEach(function init(subscription) {
+      parent[subscription.id] = subscription.id;
+    });
+
+    function find(id) {
+      if (parent[id] !== id) {
+        parent[id] = find(parent[id]);
       }
-      grouped[subscription.category].push(subscription);
+      return parent[id];
+    }
+
+    function connect(firstId, secondId) {
+      var firstRoot = find(firstId);
+      var secondRoot = find(secondId);
+      if (firstRoot !== secondRoot) {
+        parent[secondRoot] = firstRoot;
+      }
+    }
+
+    subscriptions.forEach(function compare(first, firstIndex) {
+      subscriptions.slice(firstIndex + 1).forEach(function comparePair(second) {
+        var overlap = sharedAccessTags(first, second);
+        if (!overlap.length) {
+          return;
+        }
+
+        connect(first.id, second.id);
+        overlapByPair[[first.id, second.id].sort().join("|")] = overlap;
+      });
+    });
+
+    var grouped = {};
+    subscriptions.forEach(function group(subscription) {
+      var root = find(subscription.id);
+      if (!grouped[root]) {
+        grouped[root] = [];
+      }
+      grouped[root].push(subscription);
     });
 
     return Object.keys(grouped)
-      .map(function toRedundantGroup(category) {
-        var subscriptions = grouped[category];
-        if (subscriptions.length < 2) {
+      .map(function toRedundantGroup(root) {
+        var groupSubscriptions = grouped[root];
+        if (groupSubscriptions.length < 2) {
           return null;
         }
 
-        var sorted = subscriptions.slice().sort(function byPriority(a, b) {
+        var overlapCounts = {};
+        groupSubscriptions.forEach(function countAgainst(first, firstIndex) {
+          groupSubscriptions.slice(firstIndex + 1).forEach(function countPair(second) {
+            var pairKey = [first.id, second.id].sort().join("|");
+            (overlapByPair[pairKey] || []).forEach(function add(tag) {
+              overlapCounts[tag] = (overlapCounts[tag] || 0) + 1;
+            });
+          });
+        });
+
+        var overlapTags = Object.keys(overlapCounts).sort(function byCount(a, b) {
+          return overlapCounts[b] - overlapCounts[a];
+        });
+        var sorted = groupSubscriptions.slice().sort(function byPriority(a, b) {
           if (a.isEssential !== b.isEssential) {
             return a.isEssential ? -1 : 1;
+          }
+          if (serviceIsRecognized(a) !== serviceIsRecognized(b)) {
+            return serviceIsRecognized(a) ? -1 : 1;
           }
           return monthlyCost(b) - monthlyCost(a);
         });
         var keep = sorted[0];
         var review = sorted.slice(1);
         var savings = review.reduce(function sum(total, subscription) {
-          var factor = subscription.usageStatus === "unused" ? 1 : 0.45;
+          var factor = subscription.usageStatus === "unused" ? 1 : Math.min(0.65, 0.35 + (overlapTags.length * 0.08));
           return total + monthlyCost(subscription) * factor;
         }, 0);
 
         return {
-          category: category,
-          label: categoryMeta(category).label,
+          id: "overlap-" + overlapTags.join("-"),
+          label: overlapTags.slice(0, 3).map(formatAccessTag).join(", "),
+          accessTags: overlapTags,
           keep: keep,
           review: review,
           estimatedMonthlySavings: savings
         };
       })
       .filter(Boolean);
+  }
+
+  function serviceIsRecognized(subscription) {
+    return subscription.serviceIntelligence && subscription.serviceIntelligence.status === "recognized";
   }
 
   function buildAlerts() {
@@ -478,15 +697,17 @@
 
     redundantGroups().forEach(function addGroup(group) {
       recommendations.push({
-        id: group.category + "-redundancy",
-        title: "Resolve overlap in " + group.label,
+        id: group.id + "-redundancy",
+        title: "Resolve access overlap in " + group.label,
         type: "Redundant overlap",
         estimatedMonthlySavings: group.estimatedMonthlySavings,
-        confidence: "Medium",
+        confidence: group.accessTags.some(function verified(tag) {
+          return tag.indexOf("category-") !== 0;
+        }) ? "High" : "Medium",
         subscriptionIds: group.review.map(function toId(subscription) {
           return subscription.id;
         }),
-        reason: "Keep " + group.keep.name + " as the primary option and review " + group.review.map(function toName(subscription) {
+        reason: "These subscriptions overlap on " + group.accessTags.slice(0, 4).map(formatAccessTag).join(", ") + ". Keep " + group.keep.name + " as the primary option and review " + group.review.map(function toName(subscription) {
           return subscription.name;
         }).join(", ") + "."
       });
@@ -881,8 +1102,10 @@
       '<div class="service-title-row">',
       '<h2>' + escapeHtml(subscription.name) + "</h2>",
       '<span class="status-pill ' + subscription.status + '">' + labelize(subscription.status) + "</span>",
+      renderServiceBadge(subscription),
       "</div>",
       '<p>' + meta.label + " · " + labelize(subscription.usageStatus) + " usage</p>",
+      renderAccessPreview(subscription),
       "</div>",
       "</div>",
       '<div class="subscription-meta">',
@@ -895,6 +1118,26 @@
       '<button class="icon-button danger" title="Delete subscription" aria-label="Delete ' + escapeHtml(subscription.name) + '" data-action="delete-subscription" data-id="' + subscription.id + '">' + icon("trash") + "</button>",
       "</div>",
       "</article>"
+    ].join("");
+  }
+
+  function renderServiceBadge(subscription) {
+    var intelligence = subscription.serviceIntelligence || {};
+    var recognized = intelligence.status === "recognized";
+    return '<span class="service-badge ' + (recognized ? "recognized" : "unverified") + '">' + (recognized ? "Recognized" : "Unverified") + "</span>";
+  }
+
+  function renderAccessPreview(subscription) {
+    var tags = serviceAccessTags(subscription).slice(0, 3);
+    return [
+      '<div class="access-preview">',
+      '<span>' + escapeHtml(accessSummary(subscription)) + "</span>",
+      '<div class="access-chip-list">',
+      tags.map(function toChip(tag) {
+        return '<span class="access-chip">' + escapeHtml(formatAccessTag(tag)) + "</span>";
+      }).join(""),
+      "</div>",
+      "</div>"
     ].join("");
   }
 
@@ -934,7 +1177,7 @@
       '<section class="kpi-grid savings-kpis">',
       renderKpi("Unused leakage", currency(leakage.unusedMonthly), "Marked unused but still active", "archive"),
       renderKpi("Partial-use leakage", currency(leakage.occasionalMonthly), "Estimated from occasional usage", "chart"),
-      renderKpi("Overlap leakage", currency(leakage.redundancyMonthly), "Duplicate category coverage", "spark"),
+      renderKpi("Overlap leakage", currency(leakage.redundancyMonthly), "Duplicate access coverage", "spark"),
       renderKpi("Total opportunity", currency(leakage.totalMonthly), currency(leakage.totalMonthly * 12) + " annual estimate", "wallet"),
       "</section>",
       '<section class="wide-panel">',
@@ -1022,11 +1265,13 @@
       managementUrl: "",
       notes: ""
     };
+    var intelligence = subscription.serviceIntelligence || buildServiceIntelligence(subscription.name, subscription.category, subscription.accessNotes || subscription.notes || "");
+    var accessNotes = subscription.accessNotes || intelligence.accessSummary || "";
 
     modalRoot.innerHTML = [
       '<div class="modal-backdrop" data-action="close-modal"></div>',
       '<section class="modal" role="dialog" aria-modal="true" aria-labelledby="subscription-form-title">',
-      '<form data-form="subscription">',
+      '<form data-form="subscription" data-existing="' + String(Boolean(existing)) + '">',
       '<div class="modal-header">',
       '<div>',
       '<p class="eyebrow">' + (existing ? "Edit record" : "New record") + "</p>",
@@ -1036,7 +1281,7 @@
       "</div>",
       '<input type="hidden" name="id" value="' + escapeAttr(subscription.id) + '">',
       '<div class="form-grid">',
-      '<label>Service name<input name="name" required value="' + escapeAttr(subscription.name) + '" placeholder="Spotify"></label>',
+      '<label>Service name<input name="name" required data-role="service-name" value="' + escapeAttr(subscription.name) + '" placeholder="Netflix, Microsoft 365, Dropbox"></label>',
       '<label>Merchant<input name="merchantName" value="' + escapeAttr(subscription.merchantName || "") + '" placeholder="Billing merchant"></label>',
       '<label>Category<select name="category">' + renderCategoryOptions(subscription.category) + "</select></label>",
       '<label>Price<input name="price" required type="number" min="0" step="0.01" value="' + escapeAttr(subscription.price) + '"></label>',
@@ -1047,6 +1292,8 @@
       '<label>Trial ends<input name="trialEndsAt" type="date" value="' + escapeAttr(subscription.trialEndsAt || "") + '"></label>',
       '<label>Management URL<input name="managementUrl" type="url" value="' + escapeAttr(subscription.managementUrl || "") + '" placeholder="https://"></label>',
       "</div>",
+      '<div class="service-insight" data-service-insight>' + renderServiceInsight(subscription.name, subscription.category, accessNotes) + "</div>",
+      '<label>Access / features<textarea name="accessNotes" data-role="access-notes" rows="3" placeholder="Video streaming, cloud storage, office apps, password manager">' + escapeHtml(accessNotes) + "</textarea></label>",
       '<label class="checkbox-row"><input name="isEssential" type="checkbox" ' + (subscription.isEssential ? "checked" : "") + "> Mark as essential</label>",
       '<label>Notes<textarea name="notes" rows="3" placeholder="Usage notes or cancellation steps">' + escapeHtml(subscription.notes || "") + "</textarea></label>",
       '<div class="modal-actions">',
@@ -1060,6 +1307,77 @@
     var firstInput = modalRoot.querySelector("input[name='name']");
     if (firstInput) {
       firstInput.focus();
+    }
+    var form = modalRoot.querySelector("form[data-form='subscription']");
+    if (form) {
+      updateServiceInsightInForm(form, false);
+    }
+  }
+
+  function renderServiceInsight(name, category, accessNotes) {
+    var match = matchServiceCatalog(name);
+    if (match) {
+      var service = match.service;
+      return [
+        '<div class="service-insight-icon" aria-hidden="true">' + icon("search-check") + "</div>",
+        "<div>",
+        '<strong>Recognized as ' + escapeHtml(service.canonicalName) + "</strong>",
+        '<p>' + escapeHtml(service.accessSummary) + "</p>",
+        '<div class="access-chip-list">',
+        (service.accessTags || []).slice(0, 6).map(function toChip(tag) {
+          return '<span class="access-chip">' + escapeHtml(formatAccessTag(tag)) + "</span>";
+        }).join(""),
+        "</div>",
+        "</div>"
+      ].join("");
+    }
+
+    return [
+      '<div class="service-insight-icon unverified" aria-hidden="true">' + icon("search") + "</div>",
+      "<div>",
+      "<strong>" + (name ? "Service not found in the local catalog" : "Enter a service name to check it") + "</strong>",
+      '<p>' + (accessNotes ? "Manual access details will be used for redundancy checks." : "Add access/features to help SubCheck detect overlaps for unverified services.") + "</p>",
+      '<div class="access-chip-list">',
+      parseAccessTags(accessNotes).slice(0, 6).map(function toChip(tag) {
+        return '<span class="access-chip">' + escapeHtml(formatAccessTag(tag)) + "</span>";
+      }).join(""),
+      "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function updateServiceInsightInForm(form, shouldAutofill) {
+    var nameInput = form.querySelector("[data-role='service-name']");
+    var accessInput = form.querySelector("[data-role='access-notes']");
+    var merchantInput = form.querySelector("input[name='merchantName']");
+    var categoryInput = form.querySelector("select[name='category']");
+    var urlInput = form.querySelector("input[name='managementUrl']");
+    var insight = form.querySelector("[data-service-insight]");
+    var name = nameInput ? nameInput.value : "";
+    var accessNotes = accessInput ? accessInput.value : "";
+    var match = matchServiceCatalog(name);
+    var isExisting = form.getAttribute("data-existing") === "true";
+
+    if (match && shouldAutofill) {
+      var service = match.service;
+      if (categoryInput && !isExisting) {
+        categoryInput.value = service.category;
+      }
+      if (merchantInput && !merchantInput.value.trim()) {
+        merchantInput.value = service.merchantName || service.canonicalName;
+      }
+      if (urlInput && !urlInput.value.trim()) {
+        urlInput.value = service.homepage || "";
+      }
+      if (accessInput && (!accessInput.value.trim() || accessInput.getAttribute("data-auto-filled") === "true")) {
+        accessInput.value = service.accessSummary || "";
+        accessInput.setAttribute("data-auto-filled", "true");
+        accessNotes = accessInput.value;
+      }
+    }
+
+    if (insight) {
+      insight.innerHTML = renderServiceInsight(name, categoryInput ? categoryInput.value : "utilities", accessNotes);
     }
   }
 
@@ -1094,11 +1412,19 @@
   function saveSubscription(form) {
     var formData = new FormData(form);
     var id = formData.get("id") || createId();
+    var existing = state.subscriptions.find(function find(item) {
+      return item.id === id;
+    });
+    var rawName = String(formData.get("name") || "").trim();
+    var accessNotes = String(formData.get("accessNotes") || "").trim();
+    var matchedService = matchServiceCatalog(rawName);
+    var category = matchedService && !existing ? matchedService.service.category : String(formData.get("category"));
+    var serviceIntelligence = buildServiceIntelligence(rawName, category, accessNotes);
     var subscription = {
       id: String(id),
-      name: String(formData.get("name") || "").trim(),
-      merchantName: String(formData.get("merchantName") || "").trim(),
-      category: String(formData.get("category")),
+      name: serviceIntelligence.canonicalName || rawName,
+      merchantName: String(formData.get("merchantName") || serviceIntelligence.merchantName || serviceIntelligence.canonicalName || "").trim(),
+      category: category,
       price: Number(formData.get("price")) || 0,
       interval: String(formData.get("interval")),
       nextBillDate: String(formData.get("nextBillDate")),
@@ -1106,11 +1432,13 @@
       status: String(formData.get("status")),
       usageStatus: String(formData.get("usageStatus")),
       isEssential: formData.get("isEssential") === "on",
-      managementUrl: String(formData.get("managementUrl") || "").trim(),
+      managementUrl: String(formData.get("managementUrl") || serviceIntelligence.homepage || "").trim(),
+      accessNotes: serviceIntelligence.accessSummary,
+      serviceIntelligence: serviceIntelligence,
       notes: String(formData.get("notes") || "").trim()
     };
 
-    var index = state.subscriptions.findIndex(function find(item) {
+    var index = state.subscriptions.findIndex(function findIndex(item) {
       return item.id === id;
     });
 
@@ -1338,6 +1666,24 @@
     }
   }
 
+  function handleInput(event) {
+    var target = event.target;
+    if (!target.matches("[data-role='service-name'], [data-role='access-notes']")) {
+      return;
+    }
+
+    var form = target.closest("form[data-form='subscription']");
+    if (!form) {
+      return;
+    }
+
+    if (target.matches("[data-role='access-notes']")) {
+      target.setAttribute("data-auto-filled", "false");
+    }
+
+    updateServiceInsightInForm(form, target.matches("[data-role='service-name']"));
+  }
+
   async function handleSubmit(event) {
     var form = event.target;
     if (!form.matches("[data-form]")) {
@@ -1400,6 +1746,8 @@
       "log-out": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 4v16"></path></svg>',
       plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
       refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7"></path><path d="M20 4v6h-6"></path></svg>',
+      search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>',
+      "search-check": '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path><path d="m8 11 2 2 4-4"></path></svg>',
       settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8"></path><path d="M4 12h2"></path><path d="M18 12h2"></path><path d="M12 4v2"></path><path d="M12 18v2"></path><path d="m6.3 6.3 1.4 1.4"></path><path d="m16.3 16.3 1.4 1.4"></path><path d="m17.7 6.3-1.4 1.4"></path><path d="m7.7 16.3-1.4 1.4"></path></svg>',
       shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z"></path><path d="m9 12 2 2 4-5"></path></svg>',
       spark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 6.8H21l-5.5 4 2.1 6.7-5.6-4.1-5.6 4.1 2.1-6.7-5.5-4h6.8z"></path></svg>',
@@ -1413,6 +1761,7 @@
   }
 
   document.addEventListener("click", handleClick);
+  document.addEventListener("input", handleInput);
   document.addEventListener("submit", handleSubmit);
   render();
 })();

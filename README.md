@@ -9,10 +9,11 @@ This version is intentionally dependency-free so the MVP can run immediately fro
 - Manual subscription add, edit, and delete flows.
 - Browser-local sign up, sign in, session, and sign out flows.
 - User-scoped subscriptions and settings for each local account.
+- Subscription name intelligence using a local service catalog for recognized services, access summaries, and overlap tags.
 - Dashboard with monthly spend, annualized spend, upcoming charges, and leakage estimates.
 - Category spending distribution chart.
 - Renewal and trial alert detection using configurable thresholds.
-- Savings recommendations for unused, duplicated, high-cost, and trial subscriptions.
+- Savings recommendations for unused, duplicated, high-cost, and trial subscriptions, including access-based redundancy checks.
 - Local settings for reminder windows, annual renewal warnings, and high-cost thresholds.
 - JSON export for local data handoff.
 
@@ -76,6 +77,16 @@ http://127.0.0.1:5173
 On first load, create a local SubCheck account with your name, email, and a password of at least 8 characters. The app hashes the password with a per-user salt before saving it in browser `localStorage`.
 
 Use the **Sign out** button in the dashboard header to return to the sign-in screen. Each local account has its own subscriptions and alert settings on the same browser profile.
+
+## Subscription Intelligence
+
+When you add or edit a subscription, SubCheck checks the service name against the Phase 1 local service catalog. Recognized services are normalized to a canonical name, assigned known access details, and tagged with what they provide, such as video streaming, cloud storage, office apps, design tools, or password management.
+
+The redundancy engine uses those access tags instead of only broad categories. For example, two video streaming services can be flagged as overlapping, while a music subscription and a movie subscription are less likely to be treated as redundant just because both are entertainment services.
+
+If a service is not recognized, add its access/features in the form. Those manual details are converted into local overlap tags for redundancy checks.
+
+This Phase 1 check is not a live internet lookup. Phase 2 should replace or supplement the local catalog with a backend enrichment service that verifies current subscription products from trusted APIs or search providers.
 
 ## Local Data
 
