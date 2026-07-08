@@ -7,6 +7,8 @@ This version is intentionally dependency-free so the MVP can run immediately fro
 ## Phase 1 Features
 
 - Manual subscription add, edit, and delete flows.
+- Browser-local sign up, sign in, session, and sign out flows.
+- User-scoped subscriptions and settings for each local account.
 - Dashboard with monthly spend, annualized spend, upcoming charges, and leakage estimates.
 - Category spending distribution chart.
 - Renewal and trial alert detection using configurable thresholds.
@@ -17,7 +19,7 @@ This version is intentionally dependency-free so the MVP can run immediately fro
 
 ## Requirements
 
-SubCheck Phase 1 does not require a package install step. The app is plain HTML, CSS, and JavaScript, and it stores demo data in browser `localStorage`.
+SubCheck Phase 1 does not require a package install step. The app is plain HTML, CSS, and JavaScript, and it stores local demo accounts and dashboard data in browser `localStorage`.
 
 Install these tools if you want to use the included scripts:
 
@@ -70,9 +72,19 @@ Then open:
 http://127.0.0.1:5173
 ```
 
+## Account Setup
+
+On first load, create a local SubCheck account with your name, email, and a password of at least 8 characters. The app hashes the password with a per-user salt before saving it in browser `localStorage`.
+
+Use the **Sign out** button in the dashboard header to return to the sign-in screen. Each local account has its own subscriptions and alert settings on the same browser profile.
+
 ## Local Data
 
-The MVP saves subscriptions and settings in browser `localStorage`. To reset the demo, use the in-app **Reset demo data** button on the Subscriptions or Settings screen.
+The MVP saves accounts, active session, subscriptions, and settings in browser `localStorage`. To reset subscriptions for the signed-in account, use the in-app **Reset demo data** button on the Subscriptions or Settings screen.
+
+To remove all local accounts and sessions, clear site data for the local URL in your browser, or clear `localStorage` for `http://127.0.0.1:4173`.
+
+This is a Phase 1 demo auth system. Production sign up, sign in, password recovery, and account security should move to Supabase Auth in Phase 2.
 
 ## Validation
 

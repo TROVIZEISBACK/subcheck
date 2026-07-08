@@ -1,6 +1,8 @@
 (function runSubCheckApp() {
-  var STORAGE_KEY = "subcheck.phase1.subscriptions";
+  var SUBSCRIPTIONS_KEY = "subcheck.phase1.subscriptions";
   var PREFS_KEY = "subcheck.phase1.preferences";
+  var USERS_KEY = "subcheck.phase1.users";
+  var SESSION_KEY = "subcheck.phase1.session";
   var seed = window.SubCheckSeed;
   var app = document.getElementById("app");
   var modalRoot = document.getElementById("modal-root");
@@ -8,12 +10,91 @@
   var state = {
     view: "dashboard",
     filter: "all",
-    subscriptions: loadSubscriptions(),
-    preferences: loadPreferences()
+    authMode: "signup",
+    authError: "",
+    currentUser: loadSessionUser(),
+    subscriptions: [],
+    preferences: clone(seed.preferences)
   };
 
+  if (state.currentUser) {
+    hydrateUserData();
+  }
+
+  function loadUsers() {
+    var saved = window.localStorage.getItem(USERS_KEY);
+    if (!saved) {
+      return [];
+    }
+
+    try {
+      var parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function saveUsers(users) {
+    window.localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }
+
+  function loadSessionUser() {
+    var saved = window.localStorage.getItem(SESSION_KEY);
+    if (!saved) {
+      return null;
+    }
+
+    try {
+      var session = JSON.parse(saved);
+      var users = loadUsers();
+      var user = users.find(function find(item) {
+        return item.id === session.userId;
+      });
+      return user ? publicUser(user) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function publicUser(user) {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      createdAt: user.createdAt
+    };
+  }
+
+  function setCurrentUser(user) {
+    state.currentUser = publicUser(user);
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: user.id }));
+    hydrateUserData();
+  }
+
+  function clearSession() {
+    window.localStorage.removeItem(SESSION_KEY);
+    state.currentUser = null;
+    state.subscriptions = [];
+    state.preferences = clone(seed.preferences);
+    state.view = "dashboard";
+    state.filter = "all";
+    state.authMode = "signin";
+    state.authError = "";
+    closeModal();
+  }
+
+  function hydrateUserData() {
+    state.subscriptions = loadSubscriptions();
+    state.preferences = loadPreferences();
+  }
+
+  function userStorageKey(baseKey) {
+    return state.currentUser ? baseKey + "." + state.currentUser.id : baseKey;
+  }
+
   function loadSubscriptions() {
-    var saved = window.localStorage.getItem(STORAGE_KEY);
+    var saved = state.currentUser ? window.localStorage.getItem(userStorageKey(SUBSCRIPTIONS_KEY)) : null;
     if (!saved) {
       return clone(seed.subscriptions);
     }
@@ -27,7 +108,7 @@
   }
 
   function loadPreferences() {
-    var saved = window.localStorage.getItem(PREFS_KEY);
+    var saved = state.currentUser ? window.localStorage.getItem(userStorageKey(PREFS_KEY)) : null;
     if (!saved) {
       return clone(seed.preferences);
     }
@@ -44,11 +125,58 @@
   }
 
   function saveSubscriptions() {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.subscriptions));
+    if (!state.currentUser) {
+      return;
+    }
+    window.localStorage.setItem(userStorageKey(SUBSCRIPTIONS_KEY), JSON.stringify(state.subscriptions));
   }
 
   function savePreferences() {
-    window.localStorage.setItem(PREFS_KEY, JSON.stringify(state.preferences));
+    if (!state.currentUser) {
+      return;
+    }
+    window.localStorage.setItem(userStorageKey(PREFS_KEY), JSON.stringify(state.preferences));
+  }
+
+  function normalizeEmail(email) {
+    return String(email || "").trim().toLowerCase();
+  }
+
+  function createSalt() {
+    var bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      bytes = bytes.map(function randomByte() {
+        return Math.floor(Math.random() * 256);
+      });
+    }
+    return bytesToHex(bytes);
+  }
+
+  function bytesToHex(bytes) {
+    return Array.prototype.map.call(bytes, function toHex(byte) {
+      return byte.toString(16).padStart(2, "0");
+    }).join("");
+  }
+
+  function fallbackHash(value) {
+    var hash = 2166136261;
+    for (var index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    return ("00000000" + (hash >>> 0).toString(16)).slice(-8);
+  }
+
+  async function hashPassword(password, salt) {
+    var value = salt + ":" + password;
+    if (window.crypto && window.crypto.subtle && window.TextEncoder) {
+      var encoded = new TextEncoder().encode(value);
+      var digest = await window.crypto.subtle.digest("SHA-256", encoded);
+      return bytesToHex(new Uint8Array(digest));
+    }
+    return "local-fallback-" + fallbackHash(value);
   }
 
   function currency(value) {
@@ -364,6 +492,14 @@
   }
 
   function render() {
+    if (!state.currentUser) {
+      app.className = "auth-shell";
+      modalRoot.innerHTML = "";
+      app.innerHTML = renderAuthView();
+      return;
+    }
+
+    app.className = "app-shell";
     app.innerHTML = [
       '<aside class="sidebar" aria-label="Primary navigation">',
       renderBrand(),
@@ -373,6 +509,47 @@
       '<main class="main-panel">',
       renderTopBar(),
       renderCurrentView(),
+      "</main>"
+    ].join("");
+  }
+
+  function renderAuthView() {
+    var isSignup = state.authMode === "signup";
+    return [
+      '<main class="auth-page">',
+      '<section class="auth-card" aria-labelledby="auth-title">',
+      renderBrand(),
+      '<div class="auth-title">',
+      '<p class="eyebrow">Local MVP account</p>',
+      '<h1 id="auth-title">' + (isSignup ? "Create your SubCheck account" : "Sign in to SubCheck") + "</h1>",
+      '<p>Your dashboard, subscriptions, and settings stay separated in this browser.</p>',
+      "</div>",
+      '<div class="mode-switch" role="tablist" aria-label="Authentication mode">',
+      '<button type="button" class="' + (isSignup ? "is-active" : "") + '" data-action="set-auth-mode" data-mode="signup" role="tab" aria-selected="' + String(isSignup) + '">Sign up</button>',
+      '<button type="button" class="' + (!isSignup ? "is-active" : "") + '" data-action="set-auth-mode" data-mode="signin" role="tab" aria-selected="' + String(!isSignup) + '">Sign in</button>',
+      "</div>",
+      '<form class="auth-form" data-form="auth">',
+      '<input type="hidden" name="mode" value="' + state.authMode + '">',
+      isSignup ? '<label>Full name<input name="name" required autocomplete="name" placeholder="Alex Morgan"></label>' : "",
+      '<label>Email<input name="email" type="email" required autocomplete="email" placeholder="you@example.com"></label>',
+      '<label>Password<input name="password" type="password" required minlength="8" autocomplete="' + (isSignup ? "new-password" : "current-password") + '" placeholder="At least 8 characters"></label>',
+      state.authError ? '<p class="auth-error" role="alert">' + escapeHtml(state.authError) + "</p>" : "",
+      '<button class="primary-button" type="submit">' + icon(isSignup ? "user-plus" : "check") + "<span>" + (isSignup ? "Create account" : "Sign in") + "</span></button>",
+      "</form>",
+      '<p class="auth-note">This Phase 1 account system is local to your browser. Production auth belongs in Phase 2 with Supabase Auth.</p>',
+      "</section>",
+      '<aside class="auth-context" aria-label="Local account details">',
+      '<div>',
+      '<p class="eyebrow">What gets stored</p>',
+      '<h2>Private demo workspace</h2>',
+      '<p>SubCheck saves account records, hashed passwords, subscriptions, and alert settings in browser localStorage for this MVP.</p>',
+      "</div>",
+      '<div class="auth-fact-list">',
+      '<div><span>' + icon("user") + '</span><strong>User-scoped data</strong><p>Each local account has its own subscriptions and settings.</p></div>',
+      '<div><span>' + icon("shield") + '</span><strong>Hashed passwords</strong><p>Passwords are hashed with a per-user salt before local storage.</p></div>',
+      '<div><span>' + icon("wallet") + '</span><strong>Ready to upgrade</strong><p>The dashboard can later connect to Supabase and Plaid without changing the core views.</p></div>',
+      "</div>",
+      "</aside>",
       "</main>"
     ].join("");
   }
@@ -420,6 +597,11 @@
       '<span class="eyebrow">Tracked spend</span>',
       '<strong>' + currency(stats.monthly) + '</strong>',
       '<span>' + state.subscriptions.length + ' subscriptions monitored</span>',
+      '<div class="signed-in-box">',
+      '<span class="eyebrow">Signed in</span>',
+      '<b>' + escapeHtml(state.currentUser.name) + "</b>",
+      '<span>' + escapeHtml(state.currentUser.email) + "</span>",
+      "</div>",
       "</div>"
     ].join("");
   }
@@ -434,6 +616,7 @@
       '<div class="topbar-actions">',
       '<button class="secondary-button" data-action="export-data">' + icon("download") + "<span>Export</span></button>",
       '<button class="primary-button" data-action="open-form">' + icon("plus") + "<span>Add subscription</span></button>",
+      '<button class="secondary-button" data-action="sign-out">' + icon("log-out") + "<span>Sign out</span></button>",
       "</div>",
       "</header>"
     ].join("");
@@ -783,7 +966,7 @@
       "<h2>Local MVP storage</h2>",
       "</div>",
       "</div>",
-      '<p class="body-copy">This Phase 1 build stores subscriptions in this browser only. Phase 2 should move the same records into Supabase and connect Plaid transaction sync.</p>',
+      '<p class="body-copy">This Phase 1 build stores local accounts, subscriptions, and settings in this browser only. Phase 2 should move auth and records into Supabase and connect Plaid transaction sync.</p>',
       '<div class="settings-actions">',
       '<button class="secondary-button" data-action="export-data">' + icon("download") + "<span>Export JSON</span></button>",
       '<button class="danger-button" data-action="reset-demo">' + icon("refresh") + "<span>Reset demo</span></button>",
@@ -920,6 +1103,85 @@
     render();
   }
 
+  async function handleAuthSubmit(form) {
+    var formData = new FormData(form);
+    var mode = String(formData.get("mode") || state.authMode);
+    var name = String(formData.get("name") || "").trim();
+    var email = normalizeEmail(formData.get("email"));
+    var password = String(formData.get("password") || "");
+    var users = loadUsers();
+
+    if (!email || !password) {
+      showAuthError("Enter an email address and password.");
+      return;
+    }
+
+    if (password.length < 8) {
+      showAuthError("Use at least 8 characters for your password.");
+      return;
+    }
+
+    if (mode === "signin") {
+      var existing = users.find(function byEmail(user) {
+        return user.email === email;
+      });
+
+      if (!existing) {
+        showAuthError("No SubCheck account was found for that email.");
+        return;
+      }
+
+      var attemptedHash = await hashPassword(password, existing.salt);
+      if (attemptedHash !== existing.passwordHash) {
+        showAuthError("That password does not match this account.");
+        return;
+      }
+
+      state.authError = "";
+      setCurrentUser(existing);
+      render();
+      return;
+    }
+
+    if (!name) {
+      showAuthError("Enter your name to create an account.");
+      return;
+    }
+
+    var duplicate = users.some(function byEmail(user) {
+      return user.email === email;
+    });
+
+    if (duplicate) {
+      state.authMode = "signin";
+      showAuthError("An account already exists for that email. Sign in instead.");
+      return;
+    }
+
+    var salt = createSalt();
+    var user = {
+      id: "user-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7),
+      name: name,
+      email: email,
+      salt: salt,
+      passwordHash: await hashPassword(password, salt),
+      createdAt: new Date().toISOString()
+    };
+
+    users.push(user);
+    saveUsers(users);
+    state.authError = "";
+    setCurrentUser(user);
+    saveSubscriptions();
+    savePreferences();
+    render();
+  }
+
+  function showAuthError(message) {
+    state.authError = message;
+    render();
+  }
+
   function createId() {
     return "sub-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
   }
@@ -979,6 +1241,7 @@
   function exportData() {
     var payload = {
       exportedAt: new Date().toISOString(),
+      user: state.currentUser,
       preferences: state.preferences,
       subscriptions: state.subscriptions
     };
@@ -1001,6 +1264,17 @@
 
     var action = target.getAttribute("data-action");
     var id = target.getAttribute("data-id");
+
+    if (action === "set-auth-mode") {
+      state.authMode = target.getAttribute("data-mode") || "signup";
+      state.authError = "";
+      render();
+      return;
+    }
+
+    if (!state.currentUser) {
+      return;
+    }
 
     if (action === "navigate") {
       state.view = target.getAttribute("data-view") || "dashboard";
@@ -1035,15 +1309,29 @@
     if (action === "export-data") {
       exportData();
     }
+
+    if (action === "sign-out") {
+      clearSession();
+      render();
+    }
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     var form = event.target;
     if (!form.matches("[data-form]")) {
       return;
     }
 
     event.preventDefault();
+
+    if (form.getAttribute("data-form") === "auth") {
+      await handleAuthSubmit(form);
+      return;
+    }
+
+    if (!state.currentUser) {
+      return;
+    }
 
     if (form.getAttribute("data-form") === "subscription") {
       saveSubscription(form);
@@ -1087,11 +1375,15 @@
       download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>',
       edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="m13 7 4 4"></path></svg>',
       layout: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M4 10h16"></path><path d="M10 10v9"></path></svg>',
+      "log-out": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 4v16"></path></svg>',
       plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
       refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7"></path><path d="M20 4v6h-6"></path></svg>',
       settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8"></path><path d="M4 12h2"></path><path d="M18 12h2"></path><path d="M12 4v2"></path><path d="M12 18v2"></path><path d="m6.3 6.3 1.4 1.4"></path><path d="m16.3 16.3 1.4 1.4"></path><path d="m17.7 6.3-1.4 1.4"></path><path d="m7.7 16.3-1.4 1.4"></path></svg>',
+      shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z"></path><path d="m9 12 2 2 4-5"></path></svg>',
       spark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 6.8H21l-5.5 4 2.1 6.7-5.6-4.1-5.6 4.1 2.1-6.7-5.5-4h6.8z"></path></svg>',
       trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M7 7l1 13h8l1-13"></path></svg>',
+      user: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8"></path><path d="M4 21a8 8 0 0 1 16 0"></path></svg>',
+      "user-plus": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8"></path><path d="M4 21a8 8 0 0 1 10-7.7"></path><path d="M18 15v6"></path><path d="M15 18h6"></path></svg>',
       wallet: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4z"></path><path d="M16 11h4v4h-4z"></path><path d="M4 7l3-3h11"></path></svg>',
       x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12"></path><path d="M18 6 6 18"></path></svg>'
     };
@@ -1102,4 +1394,3 @@
   document.addEventListener("submit", handleSubmit);
   render();
 })();
-
