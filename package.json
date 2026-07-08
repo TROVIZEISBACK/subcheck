@@ -1,0 +1,19 @@
+{
+  "name": "subcheck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phase 1 MVP for subscription tracking, renewal alerts, and savings recommendations.",
+  "scripts": {
+    "start": "python -m http.server 4173",
+    "check": "node --check src/data.js && node --check src/app.js"
+  },
+  "keywords": [
+    "subscriptions",
+    "budgeting",
+    "dashboard",
+    "mvp"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
