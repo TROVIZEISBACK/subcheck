@@ -963,17 +963,21 @@
       '<span class="panel-total">' + currency(total) + "/mo</span>",
       "</div>",
       '<div class="donut-layout">',
-      '<div class="donut" style="background: conic-gradient(' + gradient + ')" role="img" aria-label="Category spend distribution"><span>' + Math.round(total ? (entries[0].value / total) * 100 : 0) + '%</span></div>',
+      '<div class="donut" style="background: conic-gradient(' + gradient + ')" role="img" aria-label="Category spend distribution by monthly spend"><span>' + spendPercent(entries[0] ? entries[0].value : 0, total) + '%</span><small>top spend</small></div>',
       '<div class="legend-list">',
       entries.length ? entries
         .map(function entry(item) {
-          return '<div class="legend-row"><span class="legend-swatch" style="background:' + item.color + '"></span><span>' + item.shortLabel + '</span><strong>' + currency(item.value) + "</strong></div>";
+          return '<div class="legend-row"><span class="legend-swatch" style="background:' + item.color + '"></span><span>' + item.shortLabel + '<small>' + spendPercent(item.value, total) + '% of monthly spend</small></span><strong>' + currency(item.value) + "</strong></div>";
         })
         .join("") : renderEmptyState("No spending categories yet.", "Add your first subscription to see category spend."),
       "</div>",
       "</div>",
       "</article>"
     ].join("");
+  }
+
+  function spendPercent(value, total) {
+    return total ? Math.round((value / total) * 100) : 0;
   }
 
   function renderUpcomingCharges() {

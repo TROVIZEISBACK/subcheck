@@ -531,7 +531,8 @@ svg {
   aspect-ratio: 1;
   border-radius: 50%;
   display: grid;
-  place-items: center;
+  align-content: center;
+  justify-items: center;
   position: relative;
 }
 
@@ -552,6 +553,16 @@ svg {
   font-weight: 800;
 }
 
+.donut small {
+  position: relative;
+  z-index: 1;
+  margin-top: -2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .legend-list {
   display: grid;
   gap: 10px;
@@ -567,6 +578,13 @@ svg {
 
 .legend-row strong {
   color: var(--text);
+}
+
+.legend-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .legend-swatch {
