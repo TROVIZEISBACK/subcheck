@@ -999,8 +999,7 @@ button:focus-visible {
   outline: 0;
 }
 
-.picker-filters,
-.suggested-service-list {
+.picker-filters {
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -1023,49 +1022,6 @@ button:focus-visible {
   background: #9bd84f;
   border-color: #9bd84f;
   color: #183607;
-}
-
-.suggested-services {
-  padding: 10px;
-  border: 1px solid #d6efc0;
-  border-radius: 8px;
-  background: #ddf2ca;
-}
-
-.picker-label,
-.picker-empty-line {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.picker-empty-line {
-  margin-bottom: 0;
-}
-
-.service-tile {
-  width: 72px;
-  min-height: 72px;
-  padding: 8px 6px;
-  border: 1px solid #e5edf6;
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--text);
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.service-tile span:last-child {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
-  font-size: 10px;
-  font-weight: 800;
-  white-space: nowrap;
 }
 
 .service-picker-results {
@@ -1096,8 +1052,7 @@ button:focus-visible {
   box-shadow: 0 1px 1px rgba(23, 32, 51, 0.03);
 }
 
-.service-picker-row:hover,
-.service-tile:hover {
+.service-picker-row:hover {
   border-color: #b7e4a3;
   background: #fbfff7;
 }
@@ -1330,7 +1285,4 @@ button:focus-visible {
     max-height: calc(100vh - 370px);
   }
 
-  .service-tile {
-    width: 68px;
-  }
 }

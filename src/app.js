@@ -17,7 +17,6 @@
   var serviceCatalog = seed.serviceCatalog || [];
   var app = document.getElementById("app");
   var modalRoot = document.getElementById("modal-root");
-  var SERVICE_PICKER_SUGGESTED_IDS = ["netflix", "prime-video", "spotify", "youtube-premium", "youtube-tv"];
   var SERVICE_PICKER_FILTERS = [
     { id: "all", label: "All" },
     { id: "ai", label: "AI", tags: ["ai-assistant", "writing-assistant", "coding-assistant", "productivity-ai"] },
@@ -1288,7 +1287,6 @@
       "</div>",
       '<label class="picker-search"><span aria-hidden="true">' + icon("search") + '</span><input data-role="service-picker-search" type="search" placeholder="Search services" autocomplete="off"></label>',
       '<div class="picker-filters" data-service-picker-filters>' + renderServicePickerFilters() + "</div>",
-      '<section class="suggested-services" data-service-picker-suggestions>' + renderServicePickerSuggestions() + "</section>",
       '<div class="service-picker-results" data-service-picker-results>' + renderServicePickerResults() + "</div>",
       "</div>",
       "</section>"
@@ -1307,14 +1305,6 @@
     }).join("");
   }
 
-  function renderServicePickerSuggestions() {
-    var suggestions = suggestedPickerServices();
-    return [
-      '<p class="picker-label">Suggested services</p>',
-      suggestions.length ? '<div class="suggested-service-list">' + suggestions.map(renderServiceTile).join("") + "</div>" : '<p class="picker-empty-line">No suggested matches</p>'
-    ].join("");
-  }
-
   function renderServicePickerResults() {
     var services = servicePickerResults();
     return [
@@ -1327,25 +1317,14 @@
 
   function updateServicePicker() {
     var filterRoot = modalRoot.querySelector("[data-service-picker-filters]");
-    var suggestionRoot = modalRoot.querySelector("[data-service-picker-suggestions]");
     var resultRoot = modalRoot.querySelector("[data-service-picker-results]");
 
     if (filterRoot) {
       filterRoot.innerHTML = renderServicePickerFilters();
     }
-    if (suggestionRoot) {
-      suggestionRoot.innerHTML = renderServicePickerSuggestions();
-    }
     if (resultRoot) {
       resultRoot.innerHTML = renderServicePickerResults();
     }
-  }
-
-  function suggestedPickerServices() {
-    return SERVICE_PICKER_SUGGESTED_IDS.map(findServiceById)
-      .filter(Boolean)
-      .filter(matchesPickerFilterAndSearch)
-      .slice(0, 5);
   }
 
   function servicePickerResults() {
@@ -1360,19 +1339,8 @@
           }
         }
 
-        var aSuggested = suggestedIndex(a.id);
-        var bSuggested = suggestedIndex(b.id);
-        if (aSuggested !== bSuggested) {
-          return aSuggested - bSuggested;
-        }
-
         return a.canonicalName.localeCompare(b.canonicalName);
       });
-  }
-
-  function suggestedIndex(id) {
-    var index = SERVICE_PICKER_SUGGESTED_IDS.indexOf(id);
-    return index >= 0 ? index : 999;
   }
 
   function matchesPickerFilterAndSearch(service) {
@@ -1439,15 +1407,6 @@
       '<span class="custom-service-icon" aria-hidden="true">' + icon("plus") + "</span>",
       '<span class="service-picker-copy"><strong>Custom</strong><small>Add a custom subscription</small></span>',
       '<span class="service-picker-arrow" aria-hidden="true">' + icon("chevron-right") + "</span>",
-      "</button>"
-    ].join("");
-  }
-
-  function renderServiceTile(service) {
-    return [
-      '<button class="service-tile" type="button" title="' + escapeAttr(service.canonicalName) + '" data-action="select-service" data-service-id="' + service.id + '">',
-      renderServiceLogo(service),
-      '<span>' + escapeHtml(service.canonicalName) + "</span>",
       "</button>"
     ].join("");
   }
