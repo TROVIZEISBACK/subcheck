@@ -893,11 +893,13 @@
   }
 
   function renderTopBar() {
+    var stats = dashboardStats();
     return [
       '<header class="topbar">',
-      '<div>',
+      '<div class="topbar-title">',
       '<p class="eyebrow">' + viewEyebrow() + "</p>",
       '<h1>' + viewTitle() + "</h1>",
+      '<p class="topbar-summary">' + state.subscriptions.length + " tracked subscriptions &middot; " + currency(stats.monthly) + "/mo &middot; " + stats.alertCount + " active alerts</p>",
       "</div>",
       '<div class="topbar-actions">',
       '<button class="secondary-button" data-action="export-data">' + icon("download") + "<span>Export</span></button>",
@@ -969,9 +971,9 @@
 
   function renderKpi(label, value, helper, iconName) {
     return [
-      '<article class="metric-card">',
+      '<article class="metric-card metric-' + iconName + '">',
       '<div class="metric-icon" aria-hidden="true">' + icon(iconName) + "</div>",
-      '<div>',
+      '<div class="metric-copy">',
       '<p>' + label + "</p>",
       '<strong>' + value + "</strong>",
       '<span>' + helper + "</span>",
