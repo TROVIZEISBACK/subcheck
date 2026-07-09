@@ -1564,10 +1564,10 @@
       '<label>Category<select name="category">' + renderCategoryOptions(subscription.category) + "</select></label>",
       '<label>Price<input name="price" required type="number" min="0" step="0.01" value="' + escapeAttr(subscription.price) + '"></label>',
       '<label>Billing cadence<select name="interval">' + renderOptions(["monthly", "annual"], subscription.interval) + "</select></label>",
-      '<label>Next billing date<input name="nextBillDate" required type="date" value="' + escapeAttr(subscription.nextBillDate) + '"></label>',
+      '<label>Next billing date' + renderDateField("nextBillDate", subscription.nextBillDate, true, "Select next bill date") + "</label>",
       '<label>Status<select name="status">' + renderOptions(["active", "trial", "paused"], subscription.status) + "</select></label>",
       '<label>Usage<select name="usageStatus">' + renderOptions(["active", "occasional", "unused", "unknown"], subscription.usageStatus) + "</select></label>",
-      '<label>Trial ends<input name="trialEndsAt" type="date" value="' + escapeAttr(subscription.trialEndsAt || "") + '"></label>',
+      '<label>Trial ends' + renderDateField("trialEndsAt", subscription.trialEndsAt || "", false, "No trial end date") + "</label>",
       '<label>Management URL<input name="managementUrl" type="url" value="' + escapeAttr(subscription.managementUrl || "") + '" placeholder="https://"></label>',
       "</div>",
       '<div class="service-insight" data-service-insight>' + renderServiceInsight(subscription.name, subscription.category, accessNotes) + "</div>",
@@ -1590,6 +1590,205 @@
     if (form) {
       updateServiceInsightInForm(form, false);
     }
+  }
+
+  function renderDateField(name, value, required, emptyLabel) {
+    var label = value ? prettyDate(value) : emptyLabel;
+    return [
+      '<div class="date-field" data-date-control="' + escapeAttr(name) + '" data-date-required="' + String(Boolean(required)) + '" data-date-empty-label="' + escapeAttr(emptyLabel) + '">',
+      '<input name="' + escapeAttr(name) + '" type="hidden" value="' + escapeAttr(value || "") + '">',
+      '<button class="date-display-button" type="button" data-action="toggle-date-picker" data-date-field="' + escapeAttr(name) + '" aria-label="Choose ' + escapeAttr(labelize(name)) + '">',
+      '<span data-date-label="' + escapeAttr(name) + '">' + escapeHtml(label) + "</span>",
+      icon("calendar"),
+      "</button>",
+      '<div class="date-picker-popover is-hidden" data-date-picker="' + escapeAttr(name) + '"></div>',
+      "</div>"
+    ].join("");
+  }
+
+  function parseDateValue(value) {
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!match) {
+      return null;
+    }
+
+    var year = Number(match[1]);
+    var month = Number(match[2]) - 1;
+    var day = Number(match[3]);
+    var date = new Date(year, month, day, 12, 0, 0, 0);
+
+    if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
+      return null;
+    }
+
+    return date;
+  }
+
+  function isoDateValue(date) {
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0")
+    ].join("-");
+  }
+
+  function monthKey(date) {
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0");
+  }
+
+  function parseMonthKey(value) {
+    var match = /^(\d{4})-(\d{2})$/.exec(String(value || ""));
+    if (!match) {
+      return null;
+    }
+    return new Date(Number(match[1]), Number(match[2]) - 1, 1, 12, 0, 0, 0);
+  }
+
+  function closeDatePickers(exceptControl) {
+    modalRoot.querySelectorAll("[data-date-control]").forEach(function close(control) {
+      if (exceptControl && control === exceptControl) {
+        return;
+      }
+      var popover = control.querySelector("[data-date-picker]");
+      if (popover) {
+        popover.classList.add("is-hidden");
+      }
+    });
+  }
+
+  function openDatePicker(control, monthDate) {
+    var input = control.querySelector("input[type='hidden']");
+    var field = control.getAttribute("data-date-control");
+    var selectedDate = parseDateValue(input ? input.value : "");
+    var visibleMonth = monthDate || parseMonthKey(control.getAttribute("data-picker-month")) || selectedDate || today();
+    var popover = control.querySelector("[data-date-picker]");
+    var required = control.getAttribute("data-date-required") === "true";
+
+    if (!popover) {
+      return;
+    }
+
+    closeDatePickers(control);
+    visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1, 12, 0, 0, 0);
+    control.setAttribute("data-picker-month", monthKey(visibleMonth));
+    popover.innerHTML = renderDatePicker(field, input ? input.value : "", visibleMonth, required);
+    popover.classList.remove("is-hidden");
+  }
+
+  function renderDatePicker(field, selectedValue, monthDate, required) {
+    var selectedDate = parseDateValue(selectedValue);
+    var selectedKey = selectedDate ? isoDateValue(selectedDate) : "";
+    var todayKey = isoDateValue(today());
+    var monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1, 12, 0, 0, 0);
+    var gridStart = new Date(monthStart);
+    gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+    var weekdays = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    var days = [];
+
+    for (var index = 0; index < 42; index += 1) {
+      var day = new Date(gridStart);
+      day.setDate(gridStart.getDate() + index);
+      var value = isoDateValue(day);
+      var classes = ["date-day-button"];
+      if (day.getMonth() !== monthDate.getMonth()) {
+        classes.push("is-muted");
+      }
+      if (value === todayKey) {
+        classes.push("is-today");
+      }
+      if (value === selectedKey) {
+        classes.push("is-selected");
+      }
+      days.push('<button class="' + classes.join(" ") + '" type="button" data-action="select-date" data-date-field="' + escapeAttr(field) + '" data-date-value="' + value + '">' + day.getDate() + "</button>");
+    }
+
+    return [
+      '<div class="date-picker-card">',
+      '<div class="date-picker-header">',
+      '<button class="icon-button" type="button" title="Previous month" aria-label="Previous month" data-action="shift-date-month" data-date-field="' + escapeAttr(field) + '" data-month-offset="-1">' + icon("chevron-left") + "</button>",
+      '<strong>' + new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(monthDate) + "</strong>",
+      '<button class="icon-button" type="button" title="Next month" aria-label="Next month" data-action="shift-date-month" data-date-field="' + escapeAttr(field) + '" data-month-offset="1">' + icon("chevron-right") + "</button>",
+      "</div>",
+      '<div class="date-weekdays">' + weekdays.map(function weekday(day) {
+        return "<span>" + day + "</span>";
+      }).join("") + "</div>",
+      '<div class="date-days">' + days.join("") + "</div>",
+      '<div class="date-picker-footer">',
+      required ? "" : '<button class="ghost-button" type="button" data-action="clear-date" data-date-field="' + escapeAttr(field) + '">Clear</button>',
+      '<button class="ghost-button" type="button" data-action="set-date-today" data-date-field="' + escapeAttr(field) + '">Today</button>',
+      "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function dateControlFromTarget(target) {
+    var field = target.getAttribute("data-date-field");
+    return target.closest("[data-date-control]") || modalRoot.querySelector('[data-date-control="' + field + '"]');
+  }
+
+  function setDateFieldValue(control, value) {
+    var input = control.querySelector("input[type='hidden']");
+    var label = control.querySelector("[data-date-label]");
+    var emptyLabel = control.getAttribute("data-date-empty-label") || "Select date";
+
+    if (input) {
+      input.value = value || "";
+    }
+    if (label) {
+      label.textContent = value ? prettyDate(value) : emptyLabel;
+    }
+  }
+
+  function toggleDatePicker(target) {
+    var control = dateControlFromTarget(target);
+    if (!control) {
+      return;
+    }
+    var popover = control.querySelector("[data-date-picker]");
+    if (popover && !popover.classList.contains("is-hidden")) {
+      popover.classList.add("is-hidden");
+      return;
+    }
+    openDatePicker(control);
+  }
+
+  function shiftDatePickerMonth(target) {
+    var control = dateControlFromTarget(target);
+    if (!control) {
+      return;
+    }
+    var current = parseMonthKey(control.getAttribute("data-picker-month")) || today();
+    var offset = Number(target.getAttribute("data-month-offset")) || 0;
+    var nextMonth = new Date(current.getFullYear(), current.getMonth() + offset, 1, 12, 0, 0, 0);
+    openDatePicker(control, nextMonth);
+  }
+
+  function selectDateFromPicker(target) {
+    var control = dateControlFromTarget(target);
+    var value = target.getAttribute("data-date-value") || "";
+    if (!control || !value) {
+      return;
+    }
+    setDateFieldValue(control, value);
+    closeDatePickers();
+  }
+
+  function clearDateField(target) {
+    var control = dateControlFromTarget(target);
+    if (!control || control.getAttribute("data-date-required") === "true") {
+      return;
+    }
+    setDateFieldValue(control, "");
+    closeDatePickers();
+  }
+
+  function setDateFieldToToday(target) {
+    var control = dateControlFromTarget(target);
+    if (!control) {
+      return;
+    }
+    setDateFieldValue(control, isoDateValue(today()));
+    closeDatePickers();
   }
 
   function renderServiceInsight(name, category, accessNotes) {
@@ -1985,6 +2184,31 @@
       return;
     }
 
+    if (action === "toggle-date-picker") {
+      toggleDatePicker(target);
+      return;
+    }
+
+    if (action === "shift-date-month") {
+      shiftDatePickerMonth(target);
+      return;
+    }
+
+    if (action === "select-date") {
+      selectDateFromPicker(target);
+      return;
+    }
+
+    if (action === "clear-date") {
+      clearDateField(target);
+      return;
+    }
+
+    if (action === "set-date-today") {
+      setDateFieldToToday(target);
+      return;
+    }
+
     if (action === "check-price") {
       var priceForm = target.closest("form[data-form='subscription']");
       if (priceForm) {
@@ -2120,6 +2344,7 @@
       card: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3z"></path><path d="M3 10h18"></path><path d="M7 15h3"></path></svg>',
       chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16v-5"></path><path d="M12 16V8"></path><path d="M16 16v-3"></path></svg>',
       check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>',
+      "chevron-left": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>',
       "chevron-right": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>',
       download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>',
       edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="m13 7 4 4"></path></svg>',
