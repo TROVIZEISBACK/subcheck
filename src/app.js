@@ -30,6 +30,34 @@
     { id: "saas", label: "SaaS", categories: ["productivity"], tags: ["office-suite", "collaboration", "project-management", "team-chat"] },
     { id: "other", label: "Other" }
   ];
+  var SERVICE_PRICE_URLS = {
+    "adobe-creative-cloud": "https://www.adobe.com/creativecloud/plans.html",
+    "amazon-prime": "https://www.amazon.com/prime",
+    "apple-music": "https://www.apple.com/apple-music/",
+    "apple-tv-plus": "https://www.apple.com/apple-tv-plus/",
+    "canva-pro": "https://www.canva.com/pricing/",
+    "chatgpt-plus": "https://chatgpt.com/pricing",
+    "crunchyroll": "https://www.crunchyroll.com/premium",
+    "disney-plus": "https://www.disneyplus.com/",
+    "dropbox": "https://www.dropbox.com/plans",
+    "figma": "https://www.figma.com/pricing/",
+    "github-copilot": "https://github.com/features/copilot#pricing",
+    "google-one": "https://one.google.com/about/plans",
+    "google-workspace": "https://workspace.google.com/pricing.html",
+    "hulu": "https://www.hulu.com/welcome",
+    "microsoft-365": "https://www.microsoft.com/microsoft-365/buy/compare-all-microsoft-365-products",
+    "netflix": "https://www.netflix.com/",
+    "nordvpn": "https://nordvpn.com/pricing/",
+    "onepassword": "https://1password.com/pricing",
+    "paramount-plus": "https://www.paramountplus.com/",
+    "peacock": "https://www.peacocktv.com/",
+    "prime-video": "https://www.primevideo.com/",
+    "slack": "https://slack.com/pricing",
+    "spotify": "https://www.spotify.com/premium/",
+    "youtube-premium": "https://www.youtube.com/premium",
+    "youtube-tv": "https://tv.youtube.com/",
+    "zoom": "https://www.zoom.com/pricing/"
+  };
 
   var state = {
     view: "dashboard",
@@ -1521,8 +1549,12 @@
       '<p class="eyebrow">' + (existing ? "Edit record" : "New record") + "</p>",
       '<h2 id="subscription-form-title">' + (existing ? "Edit subscription" : "Add subscription") + "</h2>",
       "</div>",
+      '<div class="modal-header-actions">',
+      '<button class="secondary-button compact-action price-check-button" type="button" data-action="check-price">' + icon("tag") + "<span>Check price</span></button>",
       '<button class="icon-button" type="button" title="Close" aria-label="Close form" data-action="close-modal">' + icon("x") + "</button>",
       "</div>",
+      "</div>",
+      '<div class="price-check-panel is-hidden" data-price-check></div>',
       '<input type="hidden" name="id" value="' + escapeAttr(subscription.id) + '">',
       '<div class="form-grid">',
       '<label>Service name<input name="name" required data-role="service-name" value="' + escapeAttr(subscription.name) + '" placeholder="Netflix, Microsoft 365, Dropbox"></label>',
@@ -1590,6 +1622,51 @@
     ].join("");
   }
 
+  function priceCheckUrl(service) {
+    return SERVICE_PRICE_URLS[service.id] || service.pricingUrl || service.homepage || "";
+  }
+
+  function renderPriceCheckResult(name) {
+    var match = matchServiceCatalog(name);
+
+    if (match) {
+      var service = match.service;
+      var url = priceCheckUrl(service);
+      return [
+        '<div class="price-check-icon" aria-hidden="true">' + icon("tag") + "</div>",
+        "<div>",
+        '<strong>Check current price for ' + escapeHtml(service.canonicalName) + "</strong>",
+        "<p>Prices can vary by plan, region, tax, annual discounts, and family or student bundles. Confirm the current plan price, then enter it in the Price field.</p>",
+        '<div class="price-check-actions">',
+        url ? '<button class="secondary-button compact-action" type="button" data-action="open-pricing-page" data-url="' + escapeAttr(url) + '">' + icon("external-link") + "<span>Open pricing page</span></button>" : "",
+        '<button class="ghost-button" type="button" data-action="focus-price-field">Enter price</button>',
+        "</div>",
+        "</div>"
+      ].join("");
+    }
+
+    return [
+      '<div class="price-check-icon unverified" aria-hidden="true">' + icon("search") + "</div>",
+      "<div>",
+      "<strong>Pick or type a service first</strong>",
+      "<p>SubCheck can link to pricing after it recognizes the service. For a custom subscription, check the provider manually and enter the amount.</p>",
+      '<div class="price-check-actions">',
+      '<button class="ghost-button" type="button" data-action="focus-price-field">Enter price manually</button>',
+      "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function updatePriceCheckInForm(form) {
+    var panel = form.querySelector("[data-price-check]");
+    var nameInput = form.querySelector("[data-role='service-name']");
+    if (!panel) {
+      return;
+    }
+    panel.classList.remove("is-hidden");
+    panel.innerHTML = renderPriceCheckResult(nameInput ? nameInput.value : "");
+  }
+
   function updateServiceInsightInForm(form, shouldAutofill) {
     var nameInput = form.querySelector("[data-role='service-name']");
     var accessInput = form.querySelector("[data-role='access-notes']");
@@ -1622,6 +1699,11 @@
 
     if (insight) {
       insight.innerHTML = renderServiceInsight(name, categoryInput ? categoryInput.value : "utilities", accessNotes);
+    }
+
+    var pricePanel = form.querySelector("[data-price-check]");
+    if (pricePanel && !pricePanel.classList.contains("is-hidden")) {
+      updatePriceCheckInForm(form);
     }
   }
 
@@ -1901,6 +1983,31 @@
       return;
     }
 
+    if (action === "check-price") {
+      var priceForm = target.closest("form[data-form='subscription']");
+      if (priceForm) {
+        updatePriceCheckInForm(priceForm);
+      }
+      return;
+    }
+
+    if (action === "open-pricing-page") {
+      var url = target.getAttribute("data-url") || "";
+      if (/^https?:\/\//.test(url)) {
+        window.open(url, "_blank", "noopener");
+      }
+      return;
+    }
+
+    if (action === "focus-price-field") {
+      var form = target.closest("form[data-form='subscription']");
+      var priceInput = form ? form.querySelector("input[name='price']") : null;
+      if (priceInput) {
+        priceInput.focus();
+      }
+      return;
+    }
+
     if (action === "open-form") {
       openSubscriptionForm(id);
     }
@@ -2014,6 +2121,7 @@
       "chevron-right": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>',
       download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>',
       edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="m13 7 4 4"></path></svg>',
+      "external-link": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6"></path><path d="m10 14 10-10"></path><path d="M20 14v6H4V4h6"></path></svg>',
       layout: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M4 10h16"></path><path d="M10 10v9"></path></svg>',
       "log-out": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 4v16"></path></svg>',
       plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
@@ -2023,6 +2131,7 @@
       settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8"></path><path d="M4 12h2"></path><path d="M18 12h2"></path><path d="M12 4v2"></path><path d="M12 18v2"></path><path d="m6.3 6.3 1.4 1.4"></path><path d="m16.3 16.3 1.4 1.4"></path><path d="m17.7 6.3-1.4 1.4"></path><path d="m7.7 16.3-1.4 1.4"></path></svg>',
       shield: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z"></path><path d="m9 12 2 2 4-5"></path></svg>',
       spark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.2 6.8H21l-5.5 4 2.1 6.7-5.6-4.1-5.6 4.1 2.1-6.7-5.5-4h6.8z"></path></svg>',
+      tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10 10 20l-6-6L14 4h6z"></path><circle cx="16" cy="8" r="1"></circle></svg>',
       trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M7 7l1 13h8l1-13"></path></svg>',
       user: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8"></path><path d="M4 21a8 8 0 0 1 16 0"></path></svg>',
       "user-plus": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8"></path><path d="M4 21a8 8 0 0 1 10-7.7"></path><path d="M18 15v6"></path><path d="M15 18h6"></path></svg>',
