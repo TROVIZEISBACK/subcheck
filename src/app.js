@@ -963,7 +963,7 @@
       '<span class="panel-total">' + currency(total) + "/mo</span>",
       "</div>",
       '<div class="donut-layout">',
-      '<div class="donut" style="background: conic-gradient(' + gradient + ')" role="img" aria-label="Category spend distribution by monthly spend"><span>' + spendPercent(entries[0] ? entries[0].value : 0, total) + '%</span><small>top spend</small></div>',
+      '<div class="donut" style="background: conic-gradient(' + gradient + ')" role="img" aria-label="Category spend distribution by monthly spend"><div class="donut-center"><strong>' + spendPercent(entries[0] ? entries[0].value : 0, total) + '%</strong><span>Top spend</span></div></div>',
       '<div class="legend-list">',
       entries.length ? entries
         .map(function entry(item) {
