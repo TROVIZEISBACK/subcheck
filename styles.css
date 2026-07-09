@@ -1046,11 +1046,17 @@ button:focus-visible {
   position: relative;
 }
 
-.date-field input[type="hidden"] {
+.choice-field {
+  position: relative;
+}
+
+.date-field input[type="hidden"],
+.choice-field input[type="hidden"] {
   display: none;
 }
 
-.date-display-button {
+.date-display-button,
+.choice-display-button {
   width: 100%;
   min-height: 46px;
   padding: 10px 12px;
@@ -1067,14 +1073,71 @@ button:focus-visible {
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
-.date-display-button:hover {
+.date-display-button:hover,
+.choice-display-button:hover {
   border-color: var(--line-strong);
   background: #fbfdff;
   box-shadow: 0 6px 14px rgba(18, 24, 38, 0.06);
 }
 
-.date-display-button svg {
+.date-display-button svg,
+.choice-display-button svg {
   color: var(--muted);
+}
+
+.choice-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 70;
+}
+
+.choice-popover.is-hidden {
+  display: none;
+}
+
+.choice-menu {
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 4px;
+}
+
+.choice-option {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.choice-option:hover {
+  background: #ecfdf6;
+  border-color: #a7ead1;
+  color: var(--green-dark);
+}
+
+.choice-option.is-selected {
+  background: #111827;
+  border-color: #111827;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(17, 24, 39, 0.12);
+}
+
+.choice-option.is-selected svg {
+  color: #ffffff;
 }
 
 .date-picker-popover {
@@ -1616,6 +1679,11 @@ button:focus-visible {
   .date-picker-popover {
     position: static;
     width: 100%;
+    margin-top: 8px;
+  }
+
+  .choice-popover {
+    position: static;
     margin-top: 8px;
   }
 

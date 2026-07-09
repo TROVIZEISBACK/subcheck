@@ -1533,6 +1533,155 @@
     };
   }
 
+  function choiceOptions(name) {
+    if (name === "category") {
+      return Object.keys(seed.categories).map(function toCategoryOption(category) {
+        return {
+          value: category,
+          label: seed.categories[category].label
+        };
+      });
+    }
+    if (name === "interval") {
+      return [
+        { value: "monthly", label: "Monthly" },
+        { value: "annual", label: "Annual" }
+      ];
+    }
+    if (name === "status") {
+      return [
+        { value: "active", label: "Active" },
+        { value: "trial", label: "Trial" },
+        { value: "paused", label: "Paused" }
+      ];
+    }
+    if (name === "usageStatus") {
+      return [
+        { value: "active", label: "Active" },
+        { value: "occasional", label: "Occasional" },
+        { value: "unused", label: "Unused" },
+        { value: "unknown", label: "Unknown" }
+      ];
+    }
+    return [];
+  }
+
+  function choiceLabel(name, value) {
+    var selected = choiceOptions(name).find(function findOption(option) {
+      return option.value === value;
+    });
+    return selected ? selected.label : labelize(value);
+  }
+
+  function renderChoiceField(name, value) {
+    return [
+      '<div class="choice-field" data-choice-control="' + escapeAttr(name) + '">',
+      '<input name="' + escapeAttr(name) + '" type="hidden" value="' + escapeAttr(value || "") + '">',
+      '<button class="choice-display-button" type="button" data-action="toggle-choice-menu" data-choice-field="' + escapeAttr(name) + '" aria-label="Choose ' + escapeAttr(labelize(name)) + '">',
+      '<span data-choice-label="' + escapeAttr(name) + '">' + escapeHtml(choiceLabel(name, value)) + "</span>",
+      icon("chevron-down"),
+      "</button>",
+      '<div class="choice-popover is-hidden" data-choice-menu="' + escapeAttr(name) + '">' + renderChoiceMenu(name, value) + "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function renderChoiceMenu(name, selectedValue) {
+    var options = choiceOptions(name);
+    return [
+      '<div class="choice-menu" role="listbox" aria-label="' + escapeAttr(labelize(name)) + '">',
+      options.map(function toChoice(option) {
+        var active = option.value === selectedValue ? " is-selected" : "";
+        return [
+          '<button class="choice-option' + active + '" type="button" role="option" aria-selected="' + String(option.value === selectedValue) + '" data-action="select-choice" data-choice-field="' + escapeAttr(name) + '" data-choice-value="' + escapeAttr(option.value) + '">',
+          "<span>" + escapeHtml(option.label) + "</span>",
+          option.value === selectedValue ? icon("check") : "",
+          "</button>"
+        ].join("");
+      }).join(""),
+      "</div>"
+    ].join("");
+  }
+
+  function closeChoiceMenus(exceptControl) {
+    modalRoot.querySelectorAll("[data-choice-control]").forEach(function close(control) {
+      if (exceptControl && control === exceptControl) {
+        return;
+      }
+      var menu = control.querySelector("[data-choice-menu]");
+      if (menu) {
+        menu.classList.add("is-hidden");
+      }
+    });
+  }
+
+  function choiceControlFromTarget(target) {
+    var field = target.getAttribute("data-choice-field");
+    return target.closest("[data-choice-control]") || modalRoot.querySelector('[data-choice-control="' + field + '"]');
+  }
+
+  function setChoiceValue(control, value) {
+    var input = control.querySelector("input[type='hidden']");
+    var field = control.getAttribute("data-choice-control");
+    var label = control.querySelector("[data-choice-label]");
+    var menu = control.querySelector("[data-choice-menu]");
+
+    if (input) {
+      input.value = value || "";
+    }
+    if (label) {
+      label.textContent = choiceLabel(field, value);
+    }
+    if (menu) {
+      menu.innerHTML = renderChoiceMenu(field, value);
+    }
+  }
+
+  function setChoiceValueByName(root, name, value) {
+    var control = root.querySelector('[data-choice-control="' + name + '"]');
+    if (control) {
+      setChoiceValue(control, value);
+      return;
+    }
+    var input = root.querySelector('[name="' + name + '"]');
+    if (input) {
+      input.value = value;
+    }
+  }
+
+  function toggleChoiceMenu(target) {
+    var control = choiceControlFromTarget(target);
+    if (!control) {
+      return;
+    }
+    var menu = control.querySelector("[data-choice-menu]");
+    if (!menu) {
+      return;
+    }
+    if (!menu.classList.contains("is-hidden")) {
+      menu.classList.add("is-hidden");
+      return;
+    }
+    closeDatePickers();
+    closeChoiceMenus(control);
+    menu.classList.remove("is-hidden");
+  }
+
+  function selectChoice(target) {
+    var control = choiceControlFromTarget(target);
+    var value = target.getAttribute("data-choice-value") || "";
+    if (!control) {
+      return;
+    }
+    setChoiceValue(control, value);
+    closeChoiceMenus();
+
+    var form = control.closest("form[data-form='subscription']");
+    if (form && control.getAttribute("data-choice-control") === "category") {
+      updateServiceInsightInForm(form, false);
+    }
+  }
+
   function openSubscriptionForm(id, serviceId) {
     var existing = id ? state.subscriptions.find(function find(subscription) {
       return subscription.id === id;
@@ -1561,12 +1710,12 @@
       '<div class="form-grid">',
       '<label>Service name<input name="name" required data-role="service-name" value="' + escapeAttr(subscription.name) + '" placeholder="Netflix, Microsoft 365, Dropbox"></label>',
       '<label>Merchant<input name="merchantName" value="' + escapeAttr(subscription.merchantName || "") + '" placeholder="Billing merchant"></label>',
-      '<label>Category<select name="category">' + renderCategoryOptions(subscription.category) + "</select></label>",
+      '<label>Category' + renderChoiceField("category", subscription.category) + "</label>",
       '<label>Price<input name="price" required type="number" min="0" step="0.01" value="' + escapeAttr(subscription.price) + '"></label>',
-      '<label>Billing cadence<select name="interval">' + renderOptions(["monthly", "annual"], subscription.interval) + "</select></label>",
+      '<label>Billing cadence' + renderChoiceField("interval", subscription.interval) + "</label>",
       '<label>Next billing date' + renderDateField("nextBillDate", subscription.nextBillDate, true, "Select next bill date") + "</label>",
-      '<label>Status<select name="status">' + renderOptions(["active", "trial", "paused"], subscription.status) + "</select></label>",
-      '<label>Usage<select name="usageStatus">' + renderOptions(["active", "occasional", "unused", "unknown"], subscription.usageStatus) + "</select></label>",
+      '<label>Status' + renderChoiceField("status", subscription.status) + "</label>",
+      '<label>Usage' + renderChoiceField("usageStatus", subscription.usageStatus) + "</label>",
       '<label>Trial ends' + renderDateField("trialEndsAt", subscription.trialEndsAt || "", false, "No trial end date") + "</label>",
       '<label>Management URL<input name="managementUrl" type="url" value="' + escapeAttr(subscription.managementUrl || "") + '" placeholder="https://"></label>',
       "</div>",
@@ -1668,6 +1817,7 @@
       return;
     }
 
+    closeChoiceMenus();
     closeDatePickers(control);
     visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1, 12, 0, 0, 0);
     control.setAttribute("data-picker-month", monthKey(visibleMonth));
@@ -1872,7 +2022,7 @@
     var nameInput = form.querySelector("[data-role='service-name']");
     var accessInput = form.querySelector("[data-role='access-notes']");
     var merchantInput = form.querySelector("input[name='merchantName']");
-    var categoryInput = form.querySelector("select[name='category']");
+    var categoryInput = form.querySelector("[name='category']");
     var urlInput = form.querySelector("input[name='managementUrl']");
     var insight = form.querySelector("[data-service-insight]");
     var name = nameInput ? nameInput.value : "";
@@ -1883,7 +2033,7 @@
     if (match && shouldAutofill) {
       var service = match.service;
       if (categoryInput && !isExisting) {
-        categoryInput.value = service.category;
+        setChoiceValueByName(form, "category", service.category);
       }
       if (merchantInput && !merchantInput.value.trim()) {
         merchantInput.value = service.merchantName || service.canonicalName;
@@ -2184,6 +2334,16 @@
       return;
     }
 
+    if (action === "toggle-choice-menu") {
+      toggleChoiceMenu(target);
+      return;
+    }
+
+    if (action === "select-choice") {
+      selectChoice(target);
+      return;
+    }
+
     if (action === "toggle-date-picker") {
       toggleDatePicker(target);
       return;
@@ -2344,6 +2504,7 @@
       card: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3z"></path><path d="M3 10h18"></path><path d="M7 15h3"></path></svg>',
       chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16v-5"></path><path d="M12 16V8"></path><path d="M16 16v-3"></path></svg>',
       check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>',
+      "chevron-down": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>',
       "chevron-left": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>',
       "chevron-right": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>',
       download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>',
