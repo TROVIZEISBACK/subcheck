@@ -1117,7 +1117,7 @@
       '<span>Next bill: ' + prettyDate(subscription.nextBillDate) + " (" + relativeDays(days) + ")</span>",
       "</div>",
       '<div class="subscription-actions">',
-      '<button class="icon-button" title="Edit subscription" aria-label="Edit ' + escapeHtml(subscription.name) + '" data-action="open-form" data-id="' + subscription.id + '">' + icon("edit") + "</button>",
+      '<button class="secondary-button compact-action" title="Edit subscription" aria-label="Edit ' + escapeHtml(subscription.name) + '" data-action="open-form" data-id="' + subscription.id + '">' + icon("edit") + "<span>Edit</span></button>",
       '<button class="icon-button" title="Mark as unused" aria-label="Mark ' + escapeHtml(subscription.name) + ' as unused" data-action="mark-unused" data-id="' + subscription.id + '">' + icon("archive") + "</button>",
       '<button class="icon-button danger" title="Delete subscription" aria-label="Delete ' + escapeHtml(subscription.name) + '" data-action="delete-subscription" data-id="' + subscription.id + '">' + icon("trash") + "</button>",
       "</div>",
@@ -1302,7 +1302,7 @@
       '<label>Notes<textarea name="notes" rows="3" placeholder="Usage notes or cancellation steps">' + escapeHtml(subscription.notes || "") + "</textarea></label>",
       '<div class="modal-actions">',
       '<button class="secondary-button" type="button" data-action="close-modal">Cancel</button>',
-      '<button class="primary-button" type="submit">' + icon("check") + "<span>Save subscription</span></button>",
+      '<button class="primary-button" type="submit">' + icon("check") + "<span>" + (existing ? "Save changes" : "Save subscription") + "</span></button>",
       "</div>",
       "</form>",
       "</section>"

@@ -850,7 +850,14 @@ svg {
 
 .subscription-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
+}
+
+.compact-action {
+  min-height: 40px;
+  padding: 8px 10px;
 }
 
 .empty-state {
@@ -1043,6 +1050,10 @@ button:focus-visible {
   .subscription-card {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .subscription-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1081,6 +1092,10 @@ button:focus-visible {
   .secondary-button,
   .danger-button {
     width: 100%;
+  }
+
+  .subscription-actions .compact-action {
+    width: auto;
   }
 
   .kpi-grid {
