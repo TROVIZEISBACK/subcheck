@@ -37,6 +37,12 @@
         color: "#14b8a6",
         softColor: "#ccfbf1"
       },
+      shopping: {
+        label: "Shopping & Delivery",
+        shortLabel: "Shopping",
+        color: "#f97316",
+        softColor: "#ffedd5"
+      },
       unused: {
         label: "Forgotten/Unused",
         shortLabel: "Unused",
@@ -88,7 +94,7 @@
       {
         id: "prime-video",
         canonicalName: "Prime Video",
-        aliases: ["prime video", "amazon prime video", "amazon prime"],
+        aliases: ["prime video", "amazon prime video"],
         merchantName: "Amazon",
         category: "streaming",
         homepage: "https://www.primevideo.com/",
@@ -124,6 +130,86 @@
         homepage: "https://www.youtube.com/premium",
         accessSummary: "Ad-free YouTube, background play, downloads, and YouTube Music Premium.",
         accessTags: ["video-streaming", "music-streaming", "ad-free-video", "offline-listening", "background-play"]
+      },
+      {
+        id: "youtube-tv",
+        canonicalName: "YouTube TV",
+        aliases: ["youtube tv", "yt tv"],
+        merchantName: "Google",
+        category: "streaming",
+        homepage: "https://tv.youtube.com/",
+        accessSummary: "Live TV streaming with sports, news, entertainment channels, cloud DVR, and YouTube TV originals.",
+        accessTags: ["live-tv", "video-streaming", "sports", "news", "cloud-dvr"]
+      },
+      {
+        id: "amazon-prime",
+        canonicalName: "Amazon Prime",
+        aliases: ["amazon prime", "prime membership"],
+        merchantName: "Amazon",
+        category: "shopping",
+        homepage: "https://www.amazon.com/prime",
+        accessSummary: "Shopping delivery benefits, Prime Video, Prime Music, Prime Gaming, reading perks, and exclusive deals.",
+        accessTags: ["shopping-delivery", "video-streaming", "music-streaming", "gaming-perks", "exclusive-deals"]
+      },
+      {
+        id: "apple-tv-plus",
+        canonicalName: "Apple TV+",
+        aliases: ["apple tv plus", "apple tv+", "apple tv"],
+        merchantName: "Apple",
+        category: "streaming",
+        homepage: "https://tv.apple.com/",
+        accessSummary: "Apple original series, movies, documentaries, family entertainment, and offline viewing in the Apple TV app.",
+        accessTags: ["video-streaming", "movie-library", "tv-series", "original-shows", "offline-viewing"]
+      },
+      {
+        id: "paramount-plus",
+        canonicalName: "Paramount+",
+        aliases: ["paramount plus", "paramount+", "cbs all access"],
+        merchantName: "Paramount",
+        category: "streaming",
+        homepage: "https://www.paramountplus.com/",
+        accessSummary: "Movies, TV series, Paramount originals, live sports, news, and CBS programming in supported plans.",
+        accessTags: ["video-streaming", "movie-library", "tv-series", "live-tv", "sports", "news"]
+      },
+      {
+        id: "peacock",
+        canonicalName: "Peacock",
+        aliases: ["peacock", "peacock premium"],
+        merchantName: "NBCUniversal",
+        category: "streaming",
+        homepage: "https://www.peacocktv.com/",
+        accessSummary: "NBCUniversal movies, shows, originals, live sports, news, and next-day NBC programming.",
+        accessTags: ["video-streaming", "movie-library", "tv-series", "live-tv", "sports", "news"]
+      },
+      {
+        id: "crunchyroll",
+        canonicalName: "Crunchyroll",
+        aliases: ["crunchyroll", "crunchyroll premium"],
+        merchantName: "Crunchyroll",
+        category: "streaming",
+        homepage: "https://www.crunchyroll.com/",
+        accessSummary: "Anime streaming with simulcasts, manga access in supported plans, offline viewing, and ad-free episodes.",
+        accessTags: ["video-streaming", "anime", "tv-series", "offline-viewing", "ad-free-video"]
+      },
+      {
+        id: "mubi",
+        canonicalName: "MUBI",
+        aliases: ["mubi"],
+        merchantName: "MUBI",
+        category: "streaming",
+        homepage: "https://mubi.com/",
+        accessSummary: "Curated independent, classic, international, and arthouse films with streaming and offline viewing.",
+        accessTags: ["video-streaming", "movie-library", "independent-film", "international-film", "offline-viewing"]
+      },
+      {
+        id: "dazn",
+        canonicalName: "DAZN",
+        aliases: ["dazn"],
+        merchantName: "DAZN",
+        category: "streaming",
+        homepage: "https://www.dazn.com/",
+        accessSummary: "Sports streaming with live and on-demand events, fight sports, highlights, and regional sports content.",
+        accessTags: ["sports", "live-tv", "video-streaming", "on-demand-video"]
       },
       {
         id: "microsoft-365",

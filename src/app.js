@@ -17,10 +17,26 @@
   var serviceCatalog = seed.serviceCatalog || [];
   var app = document.getElementById("app");
   var modalRoot = document.getElementById("modal-root");
+  var SERVICE_PICKER_SUGGESTED_IDS = ["netflix", "prime-video", "spotify", "youtube-premium", "youtube-tv"];
+  var SERVICE_PICKER_FILTERS = [
+    { id: "all", label: "All" },
+    { id: "ai", label: "AI", tags: ["ai-assistant", "writing-assistant", "coding-assistant", "productivity-ai"] },
+    { id: "cloud", label: "Cloud", tags: ["cloud-storage", "photo-storage", "file-sync", "file-sharing", "device-backup"] },
+    { id: "design", label: "Design", tags: ["design-tools", "creative-suite", "photo-editing", "video-editing", "templates"] },
+    { id: "fitness", label: "Fitness", tags: ["fitness-classes", "workout-video", "cycling", "strength-training", "yoga"] },
+    { id: "music", label: "Music", tags: ["music-streaming", "podcasts", "radio", "ad-free-audio"] },
+    { id: "streaming", label: "Streaming", categories: ["streaming"], tags: ["video-streaming", "movie-library", "tv-series", "live-tv"] },
+    { id: "shopping", label: "Shopping", categories: ["shopping"], tags: ["shopping-delivery", "exclusive-deals"] },
+    { id: "security", label: "Security", tags: ["vpn", "password-manager", "privacy-tools", "secure-vault", "account-security"] },
+    { id: "saas", label: "SaaS", categories: ["productivity"], tags: ["office-suite", "collaboration", "project-management", "team-chat"] },
+    { id: "other", label: "Other" }
+  ];
 
   var state = {
     view: "dashboard",
     filter: "all",
+    pickerFilter: "all",
+    pickerQuery: "",
     authMode: "signup",
     authError: "",
     currentUser: loadSessionUser(),
@@ -858,7 +874,7 @@
       "</div>",
       '<div class="topbar-actions">',
       '<button class="secondary-button" data-action="export-data">' + icon("download") + "<span>Export</span></button>",
-      '<button class="primary-button" data-action="open-form">' + icon("plus") + "<span>Add subscription</span></button>",
+      '<button class="primary-button" data-action="open-picker">' + icon("plus") + "<span>Add subscription</span></button>",
       '<button class="secondary-button" data-action="sign-out">' + icon("log-out") + "<span>Sign out</span></button>",
       "</div>",
       "</header>"
@@ -1249,16 +1265,271 @@
     return '<div class="empty-state"><strong>' + title + "</strong><span>" + body + "</span></div>";
   }
 
-  function openSubscriptionForm(id) {
-    var existing = id ? state.subscriptions.find(function find(subscription) {
-      return subscription.id === id;
-    }) : null;
+  function findServiceById(id) {
+    return serviceCatalog.find(function find(service) {
+      return service.id === id;
+    }) || null;
+  }
 
-    var subscription = existing || {
+  function openServicePicker() {
+    state.pickerFilter = "all";
+    state.pickerQuery = "";
+
+    modalRoot.innerHTML = [
+      '<div class="modal-backdrop" data-action="close-modal"></div>',
+      '<section class="modal service-picker-modal" role="dialog" aria-modal="true" aria-labelledby="service-picker-title">',
+      '<div class="service-picker">',
+      '<div class="modal-header">',
+      "<div>",
+      '<p class="eyebrow">Choose subscription</p>',
+      '<h2 id="service-picker-title">Pick a service</h2>',
+      "</div>",
+      '<button class="icon-button" type="button" title="Close" aria-label="Close picker" data-action="close-modal">' + icon("x") + "</button>",
+      "</div>",
+      '<label class="picker-search"><span aria-hidden="true">' + icon("search") + '</span><input data-role="service-picker-search" type="search" placeholder="Search services" autocomplete="off"></label>',
+      '<div class="picker-filters" data-service-picker-filters>' + renderServicePickerFilters() + "</div>",
+      '<section class="suggested-services" data-service-picker-suggestions>' + renderServicePickerSuggestions() + "</section>",
+      '<div class="service-picker-results" data-service-picker-results>' + renderServicePickerResults() + "</div>",
+      "</div>",
+      "</section>"
+    ].join("");
+
+    var searchInput = modalRoot.querySelector("[data-role='service-picker-search']");
+    if (searchInput) {
+      searchInput.focus();
+    }
+  }
+
+  function renderServicePickerFilters() {
+    return SERVICE_PICKER_FILTERS.map(function filterButton(filter) {
+      var active = state.pickerFilter === filter.id ? " is-active" : "";
+      return '<button class="picker-filter-chip' + active + '" type="button" data-action="set-picker-filter" data-filter="' + filter.id + '">' + escapeHtml(filter.label) + "</button>";
+    }).join("");
+  }
+
+  function renderServicePickerSuggestions() {
+    var suggestions = suggestedPickerServices();
+    return [
+      '<p class="picker-label">Suggested services</p>',
+      suggestions.length ? '<div class="suggested-service-list">' + suggestions.map(renderServiceTile).join("") + "</div>" : '<p class="picker-empty-line">No suggested matches</p>'
+    ].join("");
+  }
+
+  function renderServicePickerResults() {
+    var services = servicePickerResults();
+    return [
+      renderCustomServiceRow(),
+      '<div class="service-picker-list">',
+      services.length ? services.map(renderServiceRow).join("") : renderEmptyState("No services found.", "Try another search or choose Custom."),
+      "</div>"
+    ].join("");
+  }
+
+  function updateServicePicker() {
+    var filterRoot = modalRoot.querySelector("[data-service-picker-filters]");
+    var suggestionRoot = modalRoot.querySelector("[data-service-picker-suggestions]");
+    var resultRoot = modalRoot.querySelector("[data-service-picker-results]");
+
+    if (filterRoot) {
+      filterRoot.innerHTML = renderServicePickerFilters();
+    }
+    if (suggestionRoot) {
+      suggestionRoot.innerHTML = renderServicePickerSuggestions();
+    }
+    if (resultRoot) {
+      resultRoot.innerHTML = renderServicePickerResults();
+    }
+  }
+
+  function suggestedPickerServices() {
+    return SERVICE_PICKER_SUGGESTED_IDS.map(findServiceById)
+      .filter(Boolean)
+      .filter(matchesPickerFilterAndSearch)
+      .slice(0, 5);
+  }
+
+  function servicePickerResults() {
+    var queryKey = normalizeServiceKey(state.pickerQuery);
+    return serviceCatalog
+      .filter(matchesPickerFilterAndSearch)
+      .sort(function byPickerOrder(a, b) {
+        if (queryKey) {
+          var scoreDiff = servicePickerScore(b, queryKey) - servicePickerScore(a, queryKey);
+          if (scoreDiff) {
+            return scoreDiff;
+          }
+        }
+
+        var aSuggested = suggestedIndex(a.id);
+        var bSuggested = suggestedIndex(b.id);
+        if (aSuggested !== bSuggested) {
+          return aSuggested - bSuggested;
+        }
+
+        return a.canonicalName.localeCompare(b.canonicalName);
+      });
+  }
+
+  function suggestedIndex(id) {
+    var index = SERVICE_PICKER_SUGGESTED_IDS.indexOf(id);
+    return index >= 0 ? index : 999;
+  }
+
+  function matchesPickerFilterAndSearch(service) {
+    return serviceMatchesPickerFilter(service, state.pickerFilter) && serviceMatchesPickerSearch(service, state.pickerQuery);
+  }
+
+  function serviceMatchesPickerFilter(service, filterId) {
+    if (!filterId || filterId === "all") {
+      return true;
+    }
+
+    if (filterId === "other") {
+      return !SERVICE_PICKER_FILTERS.some(function inNamedFilter(filter) {
+        return filter.id !== "all" && filter.id !== "other" && serviceMatchesConfiguredFilter(service, filter);
+      });
+    }
+
+    var filter = SERVICE_PICKER_FILTERS.find(function find(filterConfig) {
+      return filterConfig.id === filterId;
+    });
+    return filter ? serviceMatchesConfiguredFilter(service, filter) : true;
+  }
+
+  function serviceMatchesConfiguredFilter(service, filter) {
+    var categoryMatch = (filter.categories || []).indexOf(service.category) >= 0;
+    var serviceTags = service.accessTags || [];
+    var tagMatch = serviceTags.some(function hasTag(tag) {
+      return (filter.tags || []).indexOf(tag) >= 0;
+    });
+    return categoryMatch || tagMatch;
+  }
+
+  function serviceMatchesPickerSearch(service, query) {
+    var queryKey = normalizeServiceKey(query);
+    if (!queryKey) {
+      return true;
+    }
+
+    return servicePickerScore(service, queryKey) >= 40;
+  }
+
+  function servicePickerScore(service, queryKey) {
+    var searchText = normalizeServiceKey([
+      service.canonicalName,
+      service.merchantName,
+      service.category,
+      categoryMeta(service.category).label,
+      service.accessSummary,
+      (service.aliases || []).join(" "),
+      (service.accessTags || []).join(" ")
+    ].join(" "));
+    var score = serviceMatchScore(queryKey, service);
+
+    if (searchText.indexOf(queryKey) >= 0) {
+      score = Math.max(score, 72);
+    }
+
+    return score;
+  }
+
+  function renderCustomServiceRow() {
+    return [
+      '<button class="service-picker-row custom-service-row" type="button" data-action="open-custom-form">',
+      '<span class="custom-service-icon" aria-hidden="true">' + icon("plus") + "</span>",
+      '<span class="service-picker-copy"><strong>Custom</strong><small>Add a custom subscription</small></span>',
+      '<span class="service-picker-arrow" aria-hidden="true">' + icon("chevron-right") + "</span>",
+      "</button>"
+    ].join("");
+  }
+
+  function renderServiceTile(service) {
+    return [
+      '<button class="service-tile" type="button" title="' + escapeAttr(service.canonicalName) + '" data-action="select-service" data-service-id="' + service.id + '">',
+      renderServiceLogo(service),
+      '<span>' + escapeHtml(service.canonicalName) + "</span>",
+      "</button>"
+    ].join("");
+  }
+
+  function renderServiceRow(service) {
+    return [
+      '<button class="service-picker-row" type="button" data-action="select-service" data-service-id="' + service.id + '">',
+      renderServiceLogo(service),
+      '<span class="service-picker-copy"><strong>' + escapeHtml(service.canonicalName) + "</strong><small>" + escapeHtml(servicePickerSubtitle(service)) + "</small></span>",
+      '<span class="service-picker-arrow" aria-hidden="true">' + icon("chevron-right") + "</span>",
+      "</button>"
+    ].join("");
+  }
+
+  function servicePickerSubtitle(service) {
+    var tags = service.accessTags || [];
+    if (tags.indexOf("music-streaming") >= 0 && tags.indexOf("video-streaming") < 0) {
+      return "Music";
+    }
+    if (tags.indexOf("sports") >= 0) {
+      return "Sports streaming";
+    }
+    return categoryMeta(service.category).shortLabel;
+  }
+
+  function renderServiceLogo(service) {
+    var brand = serviceBrand(service);
+    var wide = brand.mark.length > 2 ? " is-wide" : "";
+    return '<span class="service-logo' + wide + '" style="background:' + brand.background + "; color:" + brand.color + '">' + escapeHtml(brand.mark) + "</span>";
+  }
+
+  function serviceBrand(service) {
+    var brands = {
+      "adobe-creative-cloud": { mark: "A", background: "#ef4444", color: "#ffffff" },
+      "amazon-prime": { mark: "A", background: "#f97316", color: "#ffffff" },
+      "apple-music": { mark: "AM", background: "#111827", color: "#ffffff" },
+      "apple-tv-plus": { mark: "tv+", background: "#111827", color: "#ffffff" },
+      "calm": { mark: "C", background: "#0ea5e9", color: "#ffffff" },
+      "canva-pro": { mark: "C", background: "#00c4cc", color: "#ffffff" },
+      "chatgpt-plus": { mark: "GPT", background: "#0f766e", color: "#ffffff" },
+      "crunchyroll": { mark: "C", background: "#f97316", color: "#ffffff" },
+      "dazn": { mark: "DAZN", background: "#111827", color: "#ffffff" },
+      "disney-plus": { mark: "D+", background: "#1d4ed8", color: "#ffffff" },
+      "dropbox": { mark: "Db", background: "#2563eb", color: "#ffffff" },
+      "figma": { mark: "F", background: "#a855f7", color: "#ffffff" },
+      "github-copilot": { mark: "GH", background: "#111827", color: "#ffffff" },
+      "google-one": { mark: "G1", background: "#ffffff", color: "#2563eb" },
+      "google-workspace": { mark: "G", background: "#ffffff", color: "#2563eb" },
+      "grammarly": { mark: "G", background: "#16a34a", color: "#ffffff" },
+      "headspace": { mark: "H", background: "#f97316", color: "#ffffff" },
+      "hulu": { mark: "H", background: "#1ce783", color: "#052e16" },
+      "icloud-plus": { mark: "iC", background: "#e0f2fe", color: "#0369a1" },
+      "max": { mark: "max", background: "#111827", color: "#ffffff" },
+      "microsoft-365": { mark: "365", background: "#2563eb", color: "#ffffff" },
+      "mubi": { mark: "M", background: "#1e3a8a", color: "#ffffff" },
+      "netflix": { mark: "N", background: "#111111", color: "#ef4444" },
+      "nordvpn": { mark: "N", background: "#2563eb", color: "#ffffff" },
+      "notion": { mark: "N", background: "#ffffff", color: "#111827" },
+      "onepassword": { mark: "1P", background: "#2563eb", color: "#ffffff" },
+      "paramount-plus": { mark: "P+", background: "#2563eb", color: "#ffffff" },
+      "peacock": { mark: "P", background: "#111827", color: "#facc15" },
+      "peloton-app": { mark: "P", background: "#dc2626", color: "#ffffff" },
+      "prime-video": { mark: "PV", background: "#dff6ff", color: "#0284c7" },
+      "slack": { mark: "S", background: "#4a154b", color: "#ffffff" },
+      "spotify": { mark: "S", background: "#1ed760", color: "#052e16" },
+      "youtube-premium": { mark: "YT", background: "#ef4444", color: "#ffffff" },
+      "youtube-tv": { mark: "TV", background: "#ef4444", color: "#ffffff" },
+      "zoom": { mark: "Z", background: "#2563eb", color: "#ffffff" }
+    };
+    return brands[service.id] || {
+      mark: service.canonicalName.charAt(0).toUpperCase(),
+      background: categoryMeta(service.category).softColor,
+      color: categoryMeta(service.category).color
+    };
+  }
+
+  function defaultSubscription(service) {
+    return {
       id: "",
-      name: "",
-      merchantName: "",
-      category: "streaming",
+      name: service ? service.canonicalName : "",
+      merchantName: service ? service.merchantName || service.canonicalName : "",
+      category: service ? service.category : "streaming",
       price: "",
       interval: "monthly",
       nextBillDate: dateToInput(7),
@@ -1266,9 +1537,19 @@
       status: "active",
       usageStatus: "unknown",
       isEssential: false,
-      managementUrl: "",
+      managementUrl: service ? service.homepage || "" : "",
+      accessNotes: service ? service.accessSummary || "" : "",
+      serviceIntelligence: service ? buildServiceIntelligence(service.canonicalName, service.category, service.accessSummary || "") : null,
       notes: ""
     };
+  }
+
+  function openSubscriptionForm(id, serviceId) {
+    var existing = id ? state.subscriptions.find(function find(subscription) {
+      return subscription.id === id;
+    }) : null;
+    var selectedService = !existing && serviceId ? findServiceById(serviceId) : null;
+    var subscription = existing || defaultSubscription(selectedService);
     var intelligence = subscription.serviceIntelligence || buildServiceIntelligence(subscription.name, subscription.category, subscription.accessNotes || subscription.notes || "");
     var accessNotes = subscription.accessNotes || intelligence.accessSummary || "";
 
@@ -1297,7 +1578,7 @@
       '<label>Management URL<input name="managementUrl" type="url" value="' + escapeAttr(subscription.managementUrl || "") + '" placeholder="https://"></label>',
       "</div>",
       '<div class="service-insight" data-service-insight>' + renderServiceInsight(subscription.name, subscription.category, accessNotes) + "</div>",
-      '<label>Access / features<textarea name="accessNotes" data-role="access-notes" rows="3" placeholder="Video streaming, cloud storage, office apps, password manager">' + escapeHtml(accessNotes) + "</textarea></label>",
+      '<label>Access / features<textarea name="accessNotes" data-role="access-notes" data-auto-filled="' + (selectedService ? "true" : "false") + '" rows="3" placeholder="Video streaming, cloud storage, office apps, password manager">' + escapeHtml(accessNotes) + "</textarea></label>",
       '<label class="checkbox-row"><input name="isEssential" type="checkbox" ' + (subscription.isEssential ? "checked" : "") + "> Mark as essential</label>",
       '<label>Notes<textarea name="notes" rows="3" placeholder="Usage notes or cancellation steps">' + escapeHtml(subscription.notes || "") + "</textarea></label>",
       '<div class="modal-actions">',
@@ -1308,7 +1589,7 @@
       "</section>"
     ].join("");
 
-    var firstInput = modalRoot.querySelector("input[name='name']");
+    var firstInput = modalRoot.querySelector(selectedService ? "input[name='price']" : "input[name='name']");
     if (firstInput) {
       firstInput.focus();
     }
@@ -1640,6 +1921,27 @@
       render();
     }
 
+    if (action === "open-picker") {
+      openServicePicker();
+      return;
+    }
+
+    if (action === "set-picker-filter") {
+      state.pickerFilter = target.getAttribute("data-filter") || "all";
+      updateServicePicker();
+      return;
+    }
+
+    if (action === "select-service") {
+      openSubscriptionForm(null, target.getAttribute("data-service-id"));
+      return;
+    }
+
+    if (action === "open-custom-form") {
+      openSubscriptionForm();
+      return;
+    }
+
     if (action === "open-form") {
       openSubscriptionForm(id);
     }
@@ -1672,6 +1974,12 @@
 
   function handleInput(event) {
     var target = event.target;
+    if (target.matches("[data-role='service-picker-search']")) {
+      state.pickerQuery = target.value;
+      updateServicePicker();
+      return;
+    }
+
     if (!target.matches("[data-role='service-name'], [data-role='access-notes']")) {
       return;
     }
@@ -1744,6 +2052,7 @@
       card: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3z"></path><path d="M3 10h18"></path><path d="M7 15h3"></path></svg>',
       chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16v-5"></path><path d="M12 16V8"></path><path d="M16 16v-3"></path></svg>',
       check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>',
+      "chevron-right": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>',
       download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 20h14"></path></svg>',
       edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="m13 7 4 4"></path></svg>',
       layout: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><path d="M4 10h16"></path><path d="M10 10v9"></path></svg>',
