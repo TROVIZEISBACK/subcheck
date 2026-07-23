@@ -1,19 +1,45 @@
 {
   "name": "subcheck",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Phase 1 MVP for subscription tracking, renewal alerts, and savings recommendations.",
+  "description": "SubCheck Phase 2 — subscription management on Next.js, Postgres, and Plaid.",
   "scripts": {
-    "start": "python -m http.server 4173",
-    "check": "node --check src/data.js && node --check src/app.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:setup": "node scripts/setup-db.mjs"
   },
   "keywords": [
     "subscriptions",
     "budgeting",
     "dashboard",
-    "mvp"
+    "nextjs",
+    "postgres",
+    "plaid"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "next": "^15.1.3",
+    "pg": "^8.13.1",
+    "plaid": "^30.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  }
 }
-

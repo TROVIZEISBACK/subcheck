@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens as "R G B" channels. Dark is the default; .light overrides. */
+:root,
+:root.dark {
+  color-scheme: dark;
+  --bg: 7 11 20;
+  --surface: 13 20 36;
+  --surface-2: 17 26 46;
+  --field: 4 7 14;
+  --line: 255 255 255;
+  --text: 255 255 255;
+  --text-muted: 196 208 230;
+  --text-faint: 123 138 168;
+  --accent: 34 197 140;
+  --accent-hover: 52 217 160;
+  --accent-strong: 22 163 116;
+  --accent-on: 6 17 11;
+  --accent-text: 52 217 160;
+  --danger: 252 165 165;
+  --warn: 252 211 77;
+  --info: 125 211 252;
+  --shadow: 0 12px 32px -14px rgb(0 0 0 / 0.55);
+  --glow-1: 34 197 140;
+  --glow-1-a: 0.10;
+  --glow-2: 52 120 246;
+  --glow-2-a: 0.06;
+}
+
+:root.light {
+  color-scheme: light;
+  --bg: 244 247 251;
+  --surface: 255 255 255;
+  --surface-2: 241 244 250;
+  --field: 255 255 255;
+  --line: 15 23 42;
+  --text: 15 23 42;
+  --text-muted: 71 85 105;
+  --text-faint: 100 116 139;
+  --accent: 5 150 105;
+  --accent-hover: 4 120 87;
+  --accent-strong: 4 120 87;
+  --accent-on: 255 255 255;
+  --accent-text: 4 120 87;
+  --danger: 220 38 38;
+  --warn: 180 83 9;
+  --info: 2 132 199;
+  --shadow: 0 14px 30px -16px rgb(15 23 42 / 0.15);
+  --glow-1: 16 185 129;
+  --glow-1-a: 0.10;
+  --glow-2: 52 120 246;
+  --glow-2-a: 0.05;
+}
+
+body {
+  @apply text-muted antialiased;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text-muted));
+  background-image:
+    radial-gradient(1100px 620px at 82% -8%, rgb(var(--glow-1) / var(--glow-1-a)), transparent 60%),
+    radial-gradient(900px 520px at 0% 0%, rgb(var(--glow-2) / var(--glow-2-a)), transparent 55%);
+  background-attachment: fixed;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line/[0.08] bg-surface shadow-card;
+  }
+
+  .stat-value {
+    @apply text-3xl font-semibold tracking-tight text-content;
+  }
+
+  .label {
+    @apply text-xs font-medium uppercase tracking-wider text-faint;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition
+      focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-accent-on hover:bg-accent-hover;
+  }
+  .btn-ghost {
+    @apply btn border border-line/[0.12] bg-line/[0.03] text-muted hover:bg-line/[0.06] hover:text-content;
+  }
+  .btn-danger {
+    @apply btn border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line/[0.12] bg-field px-3.5 py-2.5 text-sm text-content
+      placeholder:text-faint focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line/[0.12] bg-line/[0.04] px-2.5 py-1 text-xs font-medium text-muted;
+  }
+}

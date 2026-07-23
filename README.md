@@ -1,131 +1,116 @@
 # SubCheck
 
-SubCheck is a Phase 1 implementation of a subscription management dashboard. It helps users track recurring charges, spot upcoming renewals, estimate wasted spend, and review savings recommendations before a card is charged.
+SubCheck is a subscription management and spend-optimization app. It brings every
+recurring charge into one dashboard so you can catch renewals, trials, and wasted
+spend before your card is charged.
 
-This version is intentionally dependency-free so the MVP can run immediately from the repository. It uses browser `localStorage` for data persistence and is structured so later phases can replace local data with Supabase, Plaid transaction sync, and notification services.
+**Phase 2** (this branch) is a full-stack rebuild on **Next.js, PostgreSQL, and Plaid**,
+replacing the Phase 1 localStorage prototype. Accounts and data live in Postgres; Plaid
+bank sync is the next step.
 
-## Phase 1 Features
+## Stack
 
-- Manual subscription add, edit, and delete flows.
-- Browser-local sign up, sign in, session, and sign out flows.
-- User-scoped subscriptions and settings for each local account.
-- Subscription name intelligence using a local service catalog for recognized services, access summaries, and overlap tags.
-- Dashboard with monthly spend, annualized spend, upcoming charges, and leakage estimates.
-- Category spending distribution chart.
-- Renewal and trial alert detection using configurable thresholds.
-- Savings recommendations for unused, duplicated, high-cost, and trial subscriptions, including access-based redundancy checks.
-- Local settings for reminder windows, annual renewal warnings, and high-cost thresholds.
-- JSON export for local data handoff.
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 15 (App Router), React 19, Tailwind CSS |
+| Backend | Next.js server actions / route handlers (Node) |
+| Database | PostgreSQL via `pg`; **zero-setup PGlite fallback** (WASM Postgres) when no `DATABASE_URL` |
+| Auth | Built-in: `scrypt` password hashing + server-side sessions (httpOnly cookie) |
+| Bank sync | Plaid API (sandbox) — *integration in progress* |
 
-## Requirements
+## Quick start (zero setup)
 
-SubCheck Phase 1 does not require a package install step. The app is plain HTML, CSS, and JavaScript, and it stores local accounts and dashboard data in browser `localStorage`.
-
-Install these tools if you want to use the included scripts:
-
-- Git, for cloning the repository.
-- Python 3, for the local static server used by `npm run start`.
-- Node.js, only for `npm run check` and convenient script execution.
-
-## Installation
-
-Clone the repository:
+No database to install — the app bundles **PGlite** (real Postgres compiled to
+WebAssembly) and uses it automatically when `DATABASE_URL` isn't set. Data persists to a
+local `.pglite/` folder.
 
 ```bash
-git clone https://github.com/TROVIZEISBACK/subcheck.git
-cd subcheck
+npm install
+npm run dev
 ```
 
-No `npm install` is required because there are no runtime dependencies.
+Open http://localhost:3000, create an account, and start adding subscriptions. That's it.
 
-## Local Startup
+## Using a real Postgres (persistent / production)
 
-The fastest option is to open `index.html` directly in a browser.
+For a shared or production database, point at any Postgres and the app uses it instead of
+PGlite:
 
-For a local server, run:
+1. Copy the env template and set `DATABASE_URL`:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   ```
+   # local example
+   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/subcheck
+   # hosted example (Neon — free)
+   DATABASE_URL=postgresql://user:pass@ep-xxx.aws.neon.tech/subcheck?sslmode=require
+   ```
+
+   (TLS is enabled automatically for non-localhost hosts.)
+
+2. Create the tables (not needed for the PGlite fallback, which self-applies the schema):
+
+   ```bash
+   npm run db:setup
+   ```
+
+   This runs [`db/schema.sql`](db/schema.sql), creating `users`, `sessions`, `subscriptions`,
+   `transactions`, `alerts`, `recommendations`, and `plaid_connections`.
+
+3. Restart the dev server. Requires Postgres 13+ (for the built-in `gen_random_uuid()`).
+
+## Scripts
 
 ```bash
-npm run start
+npm run dev        # start the dev server
+npm run build      # production build (also type-checks)
+npm run start      # run the production build
+npm run db:setup   # apply db/schema.sql to DATABASE_URL
+npm run typecheck  # TypeScript only
+npm run lint       # Next.js lint
 ```
 
-Then open:
+## How it works
 
-```text
-http://127.0.0.1:4173
+- **Auth** — email/password. Passwords are hashed with `scrypt` (Node's built-in crypto).
+  A signed-in session is an opaque random token stored in the `sessions` table and sent as
+  an httpOnly cookie. Sessions are validated (and revocable) on the server.
+- **Access control** — there is no Supabase/RLS layer; every database query is scoped to the
+  signed-in user's id in the application code (`... where user_id = $1`).
+- **Business logic** — the dashboard math (monthly/annual spend, the leakage estimate,
+  redundancy detection via access tags, alerts, and the savings recommendation engine) is
+  ported verbatim from Phase 1 into `lib/calc.ts`. The service-recognition catalog is in
+  `lib/catalog.ts`.
+
+## Project structure
+
+```
+app/
+  (app)/            # authenticated shell: dashboard, subscriptions, settings
+  sign-in, sign-up  # auth pages
+  actions.ts        # server actions (auth + CRUD + preferences)
+components/          # UI (Sidebar, forms, auth)
+lib/
+  db.ts             # pg connection pool + typed query helpers
+  auth.ts           # scrypt hashing, sessions, current-user lookup
+  calc.ts           # ported business logic
+  catalog.ts        # service recognition catalog + categories
+  data.ts           # per-user data reads
+  mappers.ts        # row <-> domain conversion
+  types.ts          # domain + DB row types
+  validation.ts     # form parsing/validation
+db/schema.sql       # PostgreSQL schema
+scripts/setup-db.mjs# applies the schema to DATABASE_URL
 ```
 
-You can also start the same server without npm:
+## Roadmap
 
-```bash
-python -m http.server 4173
-```
+- **Phase 2 (in progress):** ✅ Next.js + Postgres auth/data. ⏳ Plaid Link, bank sync,
+  recurring-charge detection.
+- **Phase 3:** smarter recommendations, feedback loop.
+- **Phase 4:** guided cancellation, notifications, shared/household plans.
 
-If port `4173` is already in use, start Python on another port:
-
-```bash
-python -m http.server 5173
-```
-
-Then open:
-
-```text
-http://127.0.0.1:5173
-```
-
-## Account Setup
-
-On first load, create a local SubCheck account with your name, email, and a password of at least 8 characters. The app hashes the password with a per-user salt before saving it in browser `localStorage`.
-
-Use the **Sign out** button in the dashboard header to return to the sign-in screen. Each local account has its own subscriptions and alert settings on the same browser profile.
-
-## Subscription Intelligence
-
-When you add or edit a subscription, SubCheck checks the service name against the Phase 1 local service catalog. Recognized services are normalized to a canonical name, assigned known access details, and tagged with what they provide, such as video streaming, cloud storage, office apps, design tools, or password management.
-
-The redundancy engine uses those access tags instead of only broad categories. For example, two video streaming services can be flagged as overlapping, while a music subscription and a movie subscription are less likely to be treated as redundant just because both are entertainment services.
-
-If a service is not recognized, add its access/features in the form. Those manual details are converted into local overlap tags for redundancy checks.
-
-This Phase 1 check is not a live internet lookup. Phase 2 should replace or supplement the local catalog with a backend enrichment service that verifies current subscription products from trusted APIs or search providers.
-
-## Local Data
-
-The MVP saves accounts, active session, subscriptions, and settings in browser `localStorage`. New accounts start with an empty subscription list. To remove subscriptions for the signed-in account, use **Clear subscriptions** on the Subscriptions screen or **Clear local data** on the Settings screen.
-
-To remove all local accounts and sessions, clear site data for the local URL in your browser, or clear `localStorage` for `http://127.0.0.1:4173`.
-
-This is a Phase 1 demo auth system. Production sign up, sign in, password recovery, and account security should move to Supabase Auth in Phase 2.
-
-## Validation
-
-Run the syntax checks:
-
-```bash
-npm run check
-```
-
-This validates `src/data.js` and `src/app.js` with Node's parser.
-
-## Troubleshooting
-
-- If `npm run start` fails because Python is missing, install Python 3 or run the app by opening `index.html` directly.
-- If the browser shows old data, clear local data inside the app or clear `localStorage` for the local site.
-- If port `4173` is busy, use a different port with `python -m http.server`.
-
-## Repository Structure
-
-```text
-.
-|-- IMPLEMENTATION_PLAN.md
-|-- README.md
-|-- index.html
-|-- package.json
-|-- src
-|   |-- app.js
-|   `-- data.js
-`-- styles.css
-```
-
-## Next Phase
-
-Phase 2 should introduce Supabase Auth/Postgres and Plaid sandbox syncing while preserving the same dashboard and recommendation contracts.
+See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) for the full plan.
